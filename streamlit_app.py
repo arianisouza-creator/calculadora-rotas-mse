@@ -1,10 +1,15 @@
 import streamlit as st
 import requests
 
-API_KEY = "AIzaSyA6B_wPkGZ0-jMoKxahLLpwhWFiyLdmxFk" 
+# =========================
+# CONFIGURAÇÃO INICIAL
+# =========================
+API_KEY = "AIzaSyA6B_wPkGZ0-jMoKxahLLpwhWFiyLdmxFk"
 
 
-# ========= GEOCODING =========
+# =========================
+# FUNÇÕES DE API
+# =========================
 def geocode(local):
     url = f"https://maps.googleapis.com/maps/api/geocode/json?address={local}&key={API_KEY}"
     resp = requests.get(url).json()
@@ -16,7 +21,6 @@ def geocode(local):
     return loc["lat"], loc["lng"]
 
 
-# ========= DIRECTIONS (rota real) =========
 def obter_rota(origem, destino):
     lat_o, lng_o = geocode(origem)
     lat_d, lng_d = geocode(destino)
@@ -36,42 +40,116 @@ def obter_rota(origem, destino):
 
     leg = rota["routes"][0]["legs"][0]
 
-    dist_texto = leg["distance"]["text"]
-    dist_km = leg["distance"]["value"] / 1000
+    distancia_texto = leg["distance"]["text"]
+    distancia_km = leg["distance"]["value"] / 1000
     duracao = leg["duration"]["text"]
+    preco = distancia_km * 0.45
 
-    preco = dist_km * 0.45
-
-    return dist_texto, duracao, preco
-
+    return distancia_texto, duracao, preco
 
 
-# ================================
-#        INTERFACE WEB
-# ================================
-st.set_page_config(page_title="MSE – Calculadora de Rotas", page_icon="🛣️", layout="centered")
+# =========================
+# SETUP DA PÁGINA
+# =========================
+st.set_page_config(
+    page_title="MSE – Calculadora de Rotas",
+    page_icon="🛣️",
+    layout="centered"
+)
 
-st.markdown("<h1 style='text-align:center;color:#ff3333;'>🛣️ Calculadora de Distância Rodoviária</h1>", unsafe_allow_html=True)
+# CSS personalizado com tema MSE
+st.markdown("""
+<style>
 
-st.write("### Informe origem e destino:")
+html, body, [class*="css"]  {
+    background-color: #1a1a1a;
+    color: white;
+    font-family: Arial, sans-serif;
+}
 
-origem = st.text_input("Origem", "São Paulo - SP")
-destino = st.text_input("Destino", "Itapoá - SC")
+h1 {
+    color: #ff3333 !important;
+    text-align: center;
+    font-weight: 800;
+}
 
-if st.button("Calcular Rota", type="primary"):
+h2, h3 {
+    color: #ffffff !important;
+}
+
+input {
+    border-radius: 12px !important;
+    border: 2px solid #444444 !important;
+}
+
+button {
+    border-radius: 10px !important;
+}
+
+</style>
+""", unsafe_allow_html=True)
+
+
+# =========================
+# CABEÇALHO COM LOGO
+# =========================
+st.markdown(
+    """
+    <div style="text-align:center;">
+        <img src="https://i.imgur.com/6gK2Fne.png" width="120">
+    </div>
+    """,
+    unsafe_allow_html=True
+)
+
+st.markdown("<h1>Calculadora de Distância Rodoviária</h1>", unsafe_allow_html=True)
+
+
+# =========================
+# ENTRADAS DO USUÁRIO
+# =========================
+st.write("### Informe os dados abaixo:")
+
+origem = st.text_input("Origem:", placeholder="Ex.: São Paulo - SP")
+destino = st.text_input("Destino:", placeholder="Ex.: Itapoá - SC")
+
+botao = st.button("Calcular Rota", type="primary")
+
+
+# =========================
+# LÓGICA PRINCIPAL
+# =========================
+if botao:
     try:
-        dist, duracao, preco = obter_rota(origem, destino)
+        distancia, duracao, preco = obter_rota(origem, destino)
 
-        st.success("Cálculo realizado com sucesso!")
+        st.markdown("---")
 
-        st.write(f"### 📍 Origem: {origem}")
-        st.write(f"### 📍 Destino: {destino}")
+        st.markdown(
+            f"""
+            <div style="
+                background-color:#2b2b2b;
+                padding:20px;
+                border-radius:15px;
+                box-shadow: 0px 0px 10px #00000070;
+            ">
 
-        st.write(f"## 🛣️ Distância: **{dist}**")
-        st.write(f"## ⏳ Duração: **{duracao}**")
-        st.write(f"## 💰 Preço Estimado: **R$ {preco:.2f}**")
+            <h3>Resultado da Rota</h3>
+            <p><b>Origem:</b> {origem}</p>
+            <p><b>Destino:</b> {destino}</p>
 
-        st.caption("Fonte: Google Directions API")
+            <p>🛣️ <b>Distância:</b> {distancia}</p>
+            <p>⏳ <b>Duração:</b> {duracao}</p>
+            <p>💰 <b>Preço Estimado:</b> <span style="color:#ff3333;"><b>R$ {preco:.2f}</b></span></p>
+
+            <p style="font-size:12px;color:#888;">Fonte: Google Directions API</p>
+
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
 
     except Exception as e:
         st.error(f"Erro: {e}")
+
+
