@@ -23,7 +23,7 @@ body {
 /* Cabeçalho superior */
 .header-container {
     background: linear-gradient(90deg, #e4002b, #b30022);
-    padding: 45px 20px 60px 20px;
+    padding: 45px 20px 50px 20px;
     text-align: center;
     color: white;
     border-radius: 0 0 35px 35px;
@@ -43,37 +43,13 @@ body {
     opacity: 0.95;
 }
 
-/* Botões Nova Cotação e Histórico */
-.top-buttons {
-    margin-top: -40px;
-    display: flex;
-    justify-content: center;
-    gap: 20px;
-}
-
-.top-btn {
-    background: white;
-    color: #e4002b !important;
-    padding: 12px 26px;
-    border-radius: 10px;
-    border: none;
-    font-weight: 600;
-    font-size: 17px;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.15);
-    cursor: pointer;
-}
-
-.top-btn:hover {
-    background: #ffe6e6;
-}
-
 /* Card principal */
 .card {
     background: white;
     padding: 35px;
     border-radius: 20px;
     box-shadow: 0px 6px 20px rgba(0,0,0,0.08);
-    margin-top: 60px;
+    margin-top: 25px; /* Ajustado para subir o card */
 }
 
 /* Títulos do card */
@@ -107,7 +83,7 @@ body {
     background: #b90022 !important;
 }
 
-/* Caixinha de resultado */
+/* Caixa de resultado */
 .result-box {
     margin-top: 25px;
     padding: 25px;
@@ -132,7 +108,7 @@ body {
 st.markdown(css, unsafe_allow_html=True)
 
 # ============================================
-#          FUNÇÕES DE MAPA
+#          FUNÇÕES GOOGLE MAPS
 # ============================================
 
 def geocode(local):
@@ -169,7 +145,7 @@ def obter_rota(origem, destino):
     dist_km = leg["distance"]["value"] / 1000
     duracao = leg["duration"]["text"]
 
-    preco = dist_km * 0.45  # custo por km
+    preco = dist_km * 0.45
 
     return dist_texto, duracao, preco
 
@@ -181,11 +157,6 @@ st.markdown("""
 <div class="header-container">
     <div class="header-title">🚌 Portal de Cotações</div>
     <div class="header-sub">Sistema de cotação de passagens rodoviárias para Facilities</div>
-</div>
-
-<div class="top-buttons">
-    <button class="top-btn">✈️ Nova Cotação</button>
-    <button class="top-btn">📄 Histórico</button>
 </div>
 """, unsafe_allow_html=True)
 
