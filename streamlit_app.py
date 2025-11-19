@@ -106,3 +106,83 @@ def geocode(local):
     resp = requests.get(url).json()
 
     if resp["status"] != "OK":
+        raise Exception(f"Erro Geocoding: {resp}")
+
+    loc = resp["results"][0]["geometry"]["location"]
+    return loc["lat"], loc["lng"]
+
+
+def obter_rota(origem, destino):
+    lat_o, lng_o = geocode(origem)
+    lat_d, lng_d = geocode(destino)
+
+    url = (
+        "https://maps.googleapis.com/maps/api/directions/json"
+        f"?origin={lat_o},{lng_o}"
+        f"&destination={lat_d},{lng_d}"
+        "&mode=driving&language=pt-BR"
+        f"&key={API_KEY}"
+    )
+
+    rota = requests.get(url).json()
+
+    if rota["status"] != "OK":
+        raise Exception(f"Erro Directions API: {rota}")
+
+    leg = rota["routes"][0]["legs"][0]
+
+    dist_texto = leg["distance"]["text"]
+    dist_km = leg["distance"]["value"] / 1000
+    duracao = leg["duration"]["text"]
+
+    preco = dist_km * 0.45  # custo por km
+
+    return dist_texto, duracao, preco
+
+
+# ============================================
+#              INTERFACE WEB MSE
+# ============================================
+
+# Cabeçalho com logo
+st.markdown(f"""
+<div class="header">
+    <img src="file:///mnt/data/a0a83793-ab60-4ee4-961d-245d3a84551c.png">
+    <div class="header-title">Portal de Cotações</div>
+    <div class="header-sub">Sistema de cotação de rotas rodoviárias</div>
+</div>
+""", unsafe_allow_html=True)
+
+
+# Card principal
+st.markdown('<div class="card">', unsafe_allow_html=True)
+
+st.markdown('<div class="card-title">Cotar Passagens Rodoviárias</div>', unsafe_allow_html=True)
+st.write("Encontre as melhores opções para sua viagem")
+
+origem = st.text_input("Origem", "londrina")
+destino = st.text_input("Destino", "são paulo")
+
+calcular = st.button("🔍 Buscar Rota")
+
+if calcular:
+    try:
+        dist, duracao, preco = obter_rota(origem, destino)
+
+        st.markdown(
+            f"""
+            <div class="result-box">
+                <h3>📍 Origem: {origem.title()}</h3>
+                <h3>📍 Destino: {destino.title()}</h3>
+                <p><b>🛣️ Distância:</b> {dist}</p>
+                <p><b>⏳ Duração:</b> {duracao}</p>
+                <p><b>💰 Preço Estimado:</b> R$ {preco:.2f}</p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    except Exception as e:
+        st.error(f"Erro: {e}")
+
+st.markdown("</div>", unsafe_allow_html=True)
