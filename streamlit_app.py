@@ -1,11 +1,18 @@
 import streamlit as st
 import requests
 
+# ============================================
+#              CONFIGURAÇÃO
+# ============================================
+
 API_KEY = "AIzaSyA6B_wPkGZ0-jMoKxahLLpwhWFiyLdmxFk"
+
+st.set_page_config(page_title="Portal de Cotações MSE", page_icon="🚌", layout="centered")
 
 # ============================================
 #                  CSS MSE
 # ============================================
+
 css = """
 <style>
 
@@ -13,49 +20,67 @@ body {
     background: #f5f7fb !important;
 }
 
-/* Cabeçalho MSE vermelho */
-.header {
-    background: #e4002b; /* vermelho MSE */
-    padding: 40px;
-    border-radius: 0 0 25px 25px;
+/* Cabeçalho superior */
+.header-container {
+    background: linear-gradient(90deg, #e4002b, #b30022);
+    padding: 45px 20px 60px 20px;
     text-align: center;
-    color: white !important;
-    margin-bottom: 40px;
+    color: white;
+    border-radius: 0 0 35px 35px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.18);
 }
 
-/* Logo */
-.header img {
-    width: 120px;
-    margin-bottom: 10px;
-}
-
-/* Título */
 .header-title {
-    font-size: 40px;
-    font-weight: bold;
+    font-size: 48px;
+    font-weight: 700;
     margin-top: 5px;
+    margin-bottom: 0;
 }
 
-/* Subtítulo */
 .header-sub {
-    font-size: 20px;
-    margin-top: -5px;
+    font-size: 22px;
+    margin-top: 5px;
+    opacity: 0.95;
 }
 
-/* Card de conteúdo */
+/* Botões Nova Cotação e Histórico */
+.top-buttons {
+    margin-top: -40px;
+    display: flex;
+    justify-content: center;
+    gap: 20px;
+}
+
+.top-btn {
+    background: white;
+    color: #e4002b !important;
+    padding: 12px 26px;
+    border-radius: 10px;
+    border: none;
+    font-weight: 600;
+    font-size: 17px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.15);
+    cursor: pointer;
+}
+
+.top-btn:hover {
+    background: #ffe6e6;
+}
+
+/* Card principal */
 .card {
     background: white;
     padding: 35px;
     border-radius: 20px;
     box-shadow: 0px 6px 20px rgba(0,0,0,0.08);
-    margin-top: 10px;
+    margin-top: 60px;
 }
 
-/* Titulo do card */
+/* Títulos do card */
 .card-title {
     font-size: 28px;
     font-weight: bold;
-    color: #e4002b; /* vermelho MSE */
+    color: #e4002b;
     margin-bottom: 10px;
 }
 
@@ -67,7 +92,7 @@ body {
     border: 1px solid #cccccc;
 }
 
-/* Botão primário */
+/* Botão Buscar */
 .stButton > button {
     width: 100%;
     background: #e4002b !important;
@@ -82,25 +107,34 @@ body {
     background: #b90022 !important;
 }
 
-/* Caixa de resultados */
+/* Caixinha de resultado */
 .result-box {
     margin-top: 25px;
-    padding: 20px;
-    border-radius: 15px;
+    padding: 25px;
+    border-radius: 18px;
     background: #ffe6e9;
-    border-left: 5px solid #e4002b;
+    border-left: 6px solid #e4002b;
+    color: #000000 !important;
 }
+
+.result-box h3,
+.result-box p,
+.result-box b {
+    color: #000000 !important;
+    font-size: 18px;
+}
+
+/* Remove espaço padrão do streamlit */
+.block-container { padding-top: 0 !important; }
 
 </style>
 """
-
-# Aplica o CSS
 st.markdown(css, unsafe_allow_html=True)
 
+# ============================================
+#          FUNÇÕES DE MAPA
+# ============================================
 
-# ============================================
-#          FUNÇÕES GOOGLE MAPS
-# ============================================
 def geocode(local):
     url = f"https://maps.googleapis.com/maps/api/geocode/json?address={local}&key={API_KEY}"
     resp = requests.get(url).json()
@@ -139,33 +173,37 @@ def obter_rota(origem, destino):
 
     return dist_texto, duracao, preco
 
-
 # ============================================
-#              INTERFACE WEB MSE
+#           CABEÇALHO COMPLETO
 # ============================================
 
-# Cabeçalho com logo
-st.markdown(f"""
-<div class="header">
-    <img src="file:///mnt/data/a0a83793-ab60-4ee4-961d-245d3a84551c.png">
-    <div class="header-title">Portal de Cotações</div>
-    <div class="header-sub">Sistema de cotação de rotas rodoviárias</div>
+st.markdown("""
+<div class="header-container">
+    <div class="header-title">🚌 Portal de Cotações</div>
+    <div class="header-sub">Sistema de cotação de passagens rodoviárias para Facilities</div>
+</div>
+
+<div class="top-buttons">
+    <button class="top-btn">✈️ Nova Cotação</button>
+    <button class="top-btn">📄 Histórico</button>
 </div>
 """, unsafe_allow_html=True)
 
+# ============================================
+#                 CARD
+# ============================================
 
-# Card principal
 st.markdown('<div class="card">', unsafe_allow_html=True)
 
 st.markdown('<div class="card-title">Cotar Passagens Rodoviárias</div>', unsafe_allow_html=True)
 st.write("Encontre as melhores opções para sua viagem")
 
-origem = st.text_input("Origem", "londrina")
-destino = st.text_input("Destino", "são paulo")
+origem = st.text_input("Origem", "Londrina")
+destino = st.text_input("Destino", "São Paulo")
 
-calcular = st.button("🔍 Buscar Rota")
+buscar = st.button("🔍 Buscar Rota")
 
-if calcular:
+if buscar:
     try:
         dist, duracao, preco = obter_rota(origem, destino)
 
