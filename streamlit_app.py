@@ -1,197 +1,196 @@
 import streamlit as st
 import requests
+from datetime import datetime
 
-# ============================================
-#              CONFIGURAÇÃO
-# ============================================
-
+# ============================
+# CONFIGURAÇÕES
+# ============================
 API_KEY = "AIzaSyA6B_wPkGZ0-jMoKxahLLpwhWFiyLdmxFk"
+PRECO_KM = 0.50
 
-st.set_page_config(page_title="Portal de Cotações MSE", page_icon="🚌", layout="centered")
-
-# ============================================
-#                  CSS MSE
-# ============================================
-
-css = """
-<style>
-
-body {
-    background: #f5f7fb !important;
+# ============================
+# TABELA HOSPEDAGEM POR UF
+# ============================
+TABELA_HOSPEDAGEM = {
+    "AC": 180, "AL": 200, "AP": 180, "AM": 220,
+    "BA": 220, "CE": 210, "DF": 260, "ES": 230,
+    "GO": 210, "MA": 200, "MT": 230, "MS": 230,
+    "MG": 250, "PA": 200, "PB": 200, "PR": 250,
+    "PE": 220, "PI": 190, "RJ": 280, "RN": 200,
+    "RS": 240, "RO": 200, "RR": 200, "SC": 200,
+    "SP": 300, "SE": 190, "TO": 190
 }
 
-/* Cabeçalho superior */
-.header-container {
-    background: linear-gradient(90deg, #e4002b, #b30022);
-    padding: 45px 20px 50px 20px;
-    text-align: center;
-    color: white;
-    border-radius: 0 0 35px 35px;
-    box-shadow: 0 4px 15px rgba(0,0,0,0.18);
-}
+# ============================
+# AJUSTAR CIDADE
+# ============================
+def ajustar_cidade(cidade):
+    if "-" in cidade:
+        return cidade
+    return cidade + ", Brasil"
 
-.header-title {
-    font-size: 48px;
-    font-weight: 700;
-    margin-top: 5px;
-    margin-bottom: 0;
-}
-
-.header-sub {
-    font-size: 22px;
-    margin-top: 5px;
-    opacity: 0.95;
-}
-
-/* Card principal */
-.card {
-    background: white;
-    padding: 35px;
-    border-radius: 20px;
-    box-shadow: 0px 6px 20px rgba(0,0,0,0.08);
-    margin-top: 25px; /* Ajustado para subir o card */
-}
-
-/* Títulos do card */
-.card-title {
-    font-size: 28px;
-    font-weight: bold;
-    color: #e4002b;
-    margin-bottom: 10px;
-}
-
-/* Inputs */
-.stTextInput > div > div > input {
-    padding: 14px;
-    font-size: 16px;
-    border-radius: 12px !important;
-    border: 1px solid #cccccc;
-}
-
-/* Botão Buscar */
-.stButton > button {
-    width: 100%;
-    background: #e4002b !important;
-    color: white !important;
-    padding: 14px;
-    font-size: 18px;
-    border-radius: 12px;
-    border: none;
-}
-
-.stButton > button:hover {
-    background: #b90022 !important;
-}
-
-/* Caixa de resultado */
-.result-box {
-    margin-top: 25px;
-    padding: 25px;
-    border-radius: 18px;
-    background: #ffe6e9;
-    border-left: 6px solid #e4002b;
-    color: #000000 !important;
-}
-
-.result-box h3,
-.result-box p,
-.result-box b {
-    color: #000000 !important;
-    font-size: 18px;
-}
-
-/* Remove espaço padrão do streamlit */
-.block-container { padding-top: 0 !important; }
-
-</style>
-"""
-st.markdown(css, unsafe_allow_html=True)
-
-# ============================================
-#          FUNÇÕES GOOGLE MAPS
-# ============================================
-
-def geocode(local):
-    url = f"https://maps.googleapis.com/maps/api/geocode/json?address={local}&key={API_KEY}"
-    resp = requests.get(url).json()
-
-    if resp["status"] != "OK":
-        raise Exception(f"Erro Geocoding: {resp}")
-
-    loc = resp["results"][0]["geometry"]["location"]
-    return loc["lat"], loc["lng"]
-
-
-def obter_rota(origem, destino):
-    lat_o, lng_o = geocode(origem)
-    lat_d, lng_d = geocode(destino)
+# ============================
+# CALCULAR KM GOOGLE
+# ============================
+def get_km(origem, destino):
+    origem = ajustar_cidade(origem)
+    destino = ajustar_cidade(destino)
 
     url = (
-        "https://maps.googleapis.com/maps/api/directions/json"
-        f"?origin={lat_o},{lng_o}"
-        f"&destination={lat_d},{lng_d}"
-        "&mode=driving&language=pt-BR"
-        f"&key={API_KEY}"
+        "https://maps.googleapis.com/maps/api/distancematrix/json"
+        f"?units=metric&origins={origem}&destinations={destino}&key={API_KEY}"
     )
 
-    rota = requests.get(url).json()
+    response = requests.get(url).json()
 
-    if rota["status"] != "OK":
-        raise Exception(f"Erro Directions API: {rota}")
+    try:
+        return response["rows"][0]["elements"][0]["distance"]["value"] / 1000
+    except:
+        return 0
 
-    leg = rota["routes"][0]["legs"][0]
+# ============================
+# CALCULAR DIAS
+# ============================
+def calcular_dias(ida, volta):
+    if not ida or not volta:
+        return 1
+    return (volta - ida).days
 
-    dist_texto = leg["distance"]["text"]
-    dist_km = leg["distance"]["value"] / 1000
-    duracao = leg["duration"]["text"]
+def calcular_dias_hosp(ida, volta):
+    if not ida or not volta:
+        return 1
+    return (volta - ida).days + 1
 
-    preco = dist_km * 0.45
+# ============================
+# STREAMLIT – APLICATIVO
+# ============================
+st.set_page_config(page_title="MSE Travel Express", layout="centered")
 
-    return dist_texto, duracao, preco
-
-# ============================================
-#           CABEÇALHO COMPLETO
-# ============================================
-
+# CSS TEMA MSE
 st.markdown("""
-<div class="header-container">
-    <div class="header-title">🚌 Portal de Cotações</div>
-    <div class="header-sub">Sistema de cotação de passagens rodoviárias para Facilities</div>
-</div>
+<style>
+body {
+    background-color: #f4f4f4;
+}
+.header {
+    background:#8B0000; 
+    padding:20px;
+    color:white;
+    text-align:center;
+    font-size:28px;
+    font-weight:bold;
+    border-radius:10px;
+}
+.button {
+    background:#8B0000; 
+    color:white; 
+    padding:12px; 
+    width:100%; 
+    border:none; 
+    border-radius:10px; 
+    font-size:20px;
+}
+.box {
+    background:white;
+    padding:20px;
+    border-radius:10px;
+    box-shadow:0 0 10px #ccc;
+}
+</style>
 """, unsafe_allow_html=True)
 
-# ============================================
-#                 CARD
-# ============================================
+# ============================
+# CABEÇALHO
+# ============================
+st.markdown('<div class="header">MSE TRAVEL EXPRESS</div>', unsafe_allow_html=True)
+st.write("")
+st.write("")
 
-st.markdown('<div class="card">', unsafe_allow_html=True)
+# ============================
+# BOTÕES PRINCIPAIS
+# ============================
+opcao = st.radio(
+    "Selecione o tipo de cotação:",
+    ["Passagem Rodoviária", "Hospedagem", "Veículo"],
+    index=0
+)
 
-st.markdown('<div class="card-title">Cotar Passagens Rodoviárias</div>', unsafe_allow_html=True)
-st.write("Encontre as melhores opções para sua viagem")
+st.write("")
 
-origem = st.text_input("Origem", "Londrina")
-destino = st.text_input("Destino", "São Paulo")
+# ============================
+# FORMULÁRIOS
+# ============================
+st.markdown('<div class="box">', unsafe_allow_html=True)
 
-buscar = st.button("🔍 Buscar Rota")
+if opcao == "Passagem Rodoviária":
+    origem = st.text_input("Cidade de Origem")
+    destino = st.text_input("Cidade de Destino (Ex: Curitiba - PR)")
 
-if buscar:
-    try:
-        dist, duracao, preco = obter_rota(origem, destino)
+    if st.button("COTAR", use_container_width=True):
+        km = get_km(origem, destino)
 
-        st.markdown(
-            f"""
-            <div class="result-box">
-                <h3>📍 Origem: {origem.title()}</h3>
-                <h3>📍 Destino: {destino.title()}</h3>
-                <p><b>🛣️ Distância:</b> {dist}</p>
-                <p><b>⏳ Duração:</b> {duracao}</p>
-                <p><b>💰 Preço Estimado:</b> R$ {preco:.2f}</p>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
+        if km == 0:
+            st.error("Erro ao calcular a distância. Use o formato Cidade - UF.")
+        else:
+            total = km * PRECO_KM
+            st.info(f"""
+🚌 **Passagem Rodoviária**
 
-    except Exception as e:
-        st.error(f"Erro: {e}")
+Origem: **{origem}**  
+Destino: **{destino}**
 
-st.markdown("</div>", unsafe_allow_html=True)
+Distância: **{km:.1f} km**  
+Total estimado: **R$ {total:.2f}**
+""")
+
+# -------------------------------------
+
+elif opcao == "Hospedagem":
+    destino = st.text_input("Cidade de Destino (Ex: São Paulo - SP)")
+    data_ida = st.date_input("Data de Ida")
+    data_volta = st.date_input("Data de Volta")
+
+    if st.button("COTAR", use_container_width=True):
+        try:
+            uf = destino.split("-")[1].strip().upper()
+            diaria = TABELA_HOSPEDAGEM[uf]
+            dias = calcular_dias_hosp(data_ida, data_volta)
+            total = diaria * dias
+
+            st.info(f"""
+🏨 **Hospedagem**
+
+Cidade: **{destino}**  
+Estado (UF): **{uf}**
+
+Dias de hospedagem: **{dias}**
+
+💰 **Total estimado: R$ {total:.2f}**
+""")
+
+        except:
+            st.error("Erro: Informe o destino no formato Cidade - UF.")
+
+# -------------------------------------
+
+elif opcao == "Veículo":
+    origem = st.text_input("Cidade de Origem")
+    destino = st.text_input("Cidade de Destino")
+    grupo = st.selectbox("Grupo de veículo", ["B - Hatch Manual", "D - SUV Automático"])
+    data_ida = st.date_input("Data de Retirada")
+    data_volta = st.date_input("Data de Devolução")
+
+    if st.button("COTAR", use_container_width=True):
+        dias = calcular_dias(data_ida, data_volta)
+        preco_dia = 134 if grupo.startswith("B") else 203
+        total = preco_dia * dias
+
+        st.info(f"""
+🚗 **Veículo**
+
+Grupo: **{grupo}**  
+Dias: **{dias}**  
+Total estimado: **R$ {total:.2f}**
+""")
+
+st.markdown('</div>', unsafe_allow_html=True)
