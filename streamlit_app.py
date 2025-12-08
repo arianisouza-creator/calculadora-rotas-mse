@@ -255,7 +255,7 @@ if st.button("Calcular"):
     # =========================================================
     # OPÇÕES DE SOLICITAÇÃO – EXCLUSIVO COTAÇÃO GERAL
     # =========================================================
-    if tipo == "geral":
+if tipo == "geral":
     st.write("---")
     st.markdown("### 📝 Selecionar solicitação:")
 
@@ -271,17 +271,21 @@ if st.button("Calcular"):
     )
 
     if opcao == "Passagem Rodoviária":
-        abrir_link("https://portalmse.com.br/index.php",
-                   "Abrir Solicitação de Passagem Rodoviária")
+        abrir_link(
+            "https://portalmse.com.br/index.php",
+            "Abrir Solicitação de Passagem Rodoviária"
+        )
 
     elif opcao == "Hospedagem":
-        abrir_link("https://docs.google.com/forms/d/e/1FAIpQLSc7K3xq-fa_Hsw1yLel5pKILUVMM5kzhHbNRPDISGFke6aJ4A/viewform",
-                   "Abrir Solicitação de Hospedagem")
+        abrir_link(
+            "https://docs.google.com/forms/d/e/1FAIpQLSc7K3xq-fa_Hsw1yLel5pKILUVMM5kzhHbNRPDISGFke6aJ4A/viewform",
+            "Abrir Solicitação de Hospedagem"
+        )
 
     elif opcao == "Veículo":
-        abrir_link("https://docs.google.com/forms/d/e/1FAIpQLSc-ImW1hPShhR0dUT2z77rRN0PJtPw93Pz6EBMkybPJW9r8eg/viewform",
-                   "Abrir Solicitação de Veículo")
+        abrir_link(
+            "https://docs.google.com/forms/d/e/1FAIpQLSc-ImW1hPShhR0dUT2z77rRN0PJtPw93Pz6EBMkybPJW9r8eg/viewform",
+            "Abrir Solicitação de Veículo"
+        )
 
-    
-
-
+   
