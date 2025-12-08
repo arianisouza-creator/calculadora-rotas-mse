@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>MSE Travel Express</title>
+
+<style>
+    body {
+        font-family: Arial, sans-serif;
+        background: #f4f4f4;
+        padding: 0;
+        margin: 0;
+    }
+
+    .header {
+        background: #7A0000;
+        color: white;
+        padding: 18px;
+        text-align: center;
+        font-size: 26px;
+        font-weight: bold;
+    }
+
+    .container {
+        max-width: 650px;
+        margin: auto;
+        background: white;
+        margin-top: 25px;
+        padding: 25px;
+        border-radius: 12px;
+        box-shadow: 0 0 12px #ccc;
+    }
+
+    label {
+        font-weight: bold;
+        display: block;
+        margin-top: 12px;
+    }
+
+    input, select {
+        width: 100%;
+        padding: 12px;
+        margin-top: 5px;
+        border: 1px solid #aaa;
+        border-radius: 8px;
+        font-size: 16px;
+    }
+
+    button {
+        width: 100%;
+        background: #7A0000;
+        color: white;
+        font-size: 18px;
+        padding: 14px;
+        border: none;
+        border-radius: 8px;
+        cursor: pointer;
+        margin-top: 20px;
+    }
+
+    button:hover {
+        background: #5A0000;
+    }
+
+    #resultado {
+        margin-top: 20px;
+        background: #eee;
+        padding: 20px;
+        border-radius: 10px;
+        white-space: pre-line;
+        display: none;
+        font-size: 17px;
+    }
+</style>
+</head>
+
+<body>
+
+<div class="header">MSE TRAVEL EXPRESS</div>
+
+<div class="container">
+
+    <label>Tipo de Cotação</label>
+    <select id="tipo">
+        <option value="rodoviario">Rodoviário</option>
+        <option value="hospedagem">Hospedagem</option>
+        <option value="veiculo">Veículo</option>
+        <option value="geral">Cotação Geral</option>
+    </select>
+
+    <label>Origem</label>
+    <input id="origem" placeholder="Ex: Londrina">
+
+    <label>Destino</label>
+    <input id="destino" placeholder="Ex: Curitiba - PR">
+
+    <label>Data de Ida</label>
+    <input type="date" id="ida">
+
+    <label>Data de Volta</label>
+    <input type="date" id="volta">
+
+    <label>Grupo do Veículo</label>
+    <select id="grupo">
+        <option value="B">Grupo B - Hatch Manual</option>
+        <option value="EA">Grupo EA - Automático</option>
+    </select>
+
+    <button onclick="cotar()">COTAR</button>
+
+    <div id="resultado"></div>
+
+</div>
+
+<script>
+async function cotar() {
+
+    const payload = {
+        tipo: document.getElementById("tipo").value,
+        origem: document.getElementById("origem").value,
+        destino: document.getElementById("destino").value,
+        ida: document.getElementById("ida").value,
+        volta: document.getElementById("volta").value,
+        grupo: document.getElementById("grupo").value
+    };
+
+    const apiUrl = "https://calculadora-rotas-mse-uff8syq3sa54nsp7ofvk9z.streamlit.app/api";
+
+    const resultBox = document.getElementById("resultado");
+    resultBox.style.display = "block";
+    resultBox.innerHTML = "🔄 Calculando...";
+
+    try {
+        const response = await fetch(apiUrl, {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify(payload)
+        });
+
+        const data = await response.json();
+
+        resultBox.innerHTML = data.resultado;
+
+    } catch (error) {
+        resultBox.innerHTML = "❌ Erro ao conectar com o servidor. Tente novamente.";
+    }
+}
+</script>
+
+</body>
+</html>
