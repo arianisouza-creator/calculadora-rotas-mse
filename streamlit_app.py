@@ -4,8 +4,79 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 import requests
-import json
 from datetime import datetime, date
+from PIL import Image
+
+# =========================================================
+# 🔥 TEMA DARK CORPORATIVO MSE
+# =========================================================
+st.markdown("""
+    <style>
+        body, .stApp {
+            background-color: #121212 !important;
+            color: #E0E0E0 !important;
+        }
+
+        h1, h2, h3, h4, h5, h6 {
+            color: #ffffff !important;
+        }
+
+        .stMarkdown, .stTextInput, .stSelectbox, .stDateInput {
+            color: #E0E0E0 !important;
+        }
+
+        input, select, textarea {
+            background-color: #1E1E1E !important;
+            color: #E0E0E0 !important;
+            border: 1px solid #444 !important;
+        }
+
+        .stButton>button {
+            background-color: #7A0000 !important;
+            color: white !important;
+            border: 1px solid #9c0000 !important;
+            padding: 10px 18px;
+            border-radius: 8px;
+            font-size: 16px;
+        }
+
+        .stButton>button:hover {
+            background-color: #a80000 !important;
+            border-color: #ff4d4d !important;
+            transform: scale(1.02);
+        }
+
+        .stSelectbox>div>div {
+            background-color: #1E1E1E !important;
+            color: white !important;
+        }
+
+        hr {
+            border-color: #333 !important;
+        }
+
+        .stAlert {
+            background-color: #1E1E1E !important;
+            color: white !important;
+            border-left: 5px solid #7A0000 !important;
+        }
+    </style>
+""", unsafe_allow_html=True)
+
+# =========================================================
+# LOGO
+# =========================================================
+try:
+    logo = Image.open("LOGO MSE.png")
+    st.image(logo, width=180)
+except:
+    st.warning("⚠ Não foi possível carregar a logo (LOGO MSE.png).")
+
+# =========================================================
+# TÍTULO
+# =========================================================
+st.markdown("<h1 style='text-align:center; color:#ff5555;'>MSE TRAVEL EXPRESS</h1>", unsafe_allow_html=True)
+
 
 # =========================================================
 # CONFIGURAÇÕES
@@ -44,9 +115,6 @@ CIDADES_BR = {
     "bh": "Belo Horizonte - MG",
 }
 
-# =========================================================
-# FUNÇÕES BASE
-# =========================================================
 def ajustar_cidade(cidade):
     if not cidade:
         return ""
@@ -62,7 +130,6 @@ def get_km(origem, destino):
         "https://maps.googleapis.com/maps/api/distancematrix/json?units=metric"
         f"&origins={origem}&destinations={destino}&key={API_KEY}"
     )
-
     try:
         res = requests.get(url).json()
         elem = res["rows"][0]["elements"][0]
@@ -74,7 +141,7 @@ def get_km(origem, destino):
 def calcular_dias(ida, volta):
     if not ida or not volta:
         return 1
-    return (volta - ida).days or 1
+    return max((volta - ida).days, 1)
 
 
 # =========================================================
@@ -99,10 +166,10 @@ def cotar_veiculo(origem, destino, ida, volta, grupo):
 
     return (
         f"🚗 **Locação de Veículo**\n\n"
-        f"- Dias: **{dias}**\n"
-        f"- Valor das diárias: **R$ {valor_diarias:.2f}**\n"
-        f"- Combustível: **R$ {valor_comb:.2f}**\n\n"
-        f"### 💰 TOTAL: R$ {total:.2f}"
+        f"**Dias:** {dias}\n"
+        f"**Diárias:** R$ {valor_diarias:.2f}\n"
+        f"**Combustível:** R$ {valor_comb:.2f}\n\n"
+        f"💰 **TOTAL:** R$ {total:.2f}"
     )
 
 
@@ -128,16 +195,16 @@ def extrair_uf(dest):
 def cotar_hospedagem(dest, ida, volta):
     uf = extrair_uf(dest)
     if not uf or uf not in TABELA_HOSPEDAGEM:
-        return "Destino inválido."
+        return "❌ Destino inválido (use Cidade - UF)"
 
     dias = calcular_dias(ida, volta) + 1
     valor = dias * TABELA_HOSPEDAGEM[uf]
 
     return (
         f"🏨 **Hospedagem**\n\n"
-        f"- UF: **{uf}**\n"
-        f"- Diárias: **{dias}**\n\n"
-        f"### TOTAL: R$ {valor:.2f}"
+        f"**UF:** {uf}\n"
+        f"**Diárias:** {dias}\n\n"
+        f"💰 **TOTAL:** R$ {valor:.2f}"
     )
 
 
@@ -149,8 +216,8 @@ def cotar_rodoviario(origem, destino):
     valor = km * PRECO_KM
     return (
         f"🚌 **Passagem Rodoviária**\n\n"
-        f"- Distância: **{km:.1f} km**\n"
-        f"### TOTAL: R$ {valor:.2f}"
+        f"**Distância:** {km:.1f} km\n\n"
+        f"💰 **TOTAL:** R$ {valor:.2f}"
     )
 
 
@@ -159,9 +226,11 @@ def cotar_rodoviario(origem, destino):
 # =========================================================
 def cotar_geral(origem, destino, ida, volta, grupo):
     return (
-        f"{cotar_rodoviario(origem, destino)}\n\n---\n\n"
-        f"{cotar_hospedagem(destino, ida, volta)}\n\n---\n\n"
-        f"{cotar_veiculo(origem, destino, ida, volta, grupo)}"
+        cotar_rodoviario(origem, destino)
+        + "\n\n---\n\n"
+        + cotar_hospedagem(destino, ida, volta)
+        + "\n\n---\n\n"
+        + cotar_veiculo(origem, destino, ida, volta, grupo)
     )
 
 
@@ -176,7 +245,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
 
 @app.post("/api")
 async def api_calc(request: Request):
@@ -207,7 +275,7 @@ async def api_calc(request: Request):
 
 
 # =========================================================
-# THREAD PARA RODAR API
+# INIT API THREAD
 # =========================================================
 def start_api():
     uvicorn.run(app, host="0.0.0.0", port=8000)
@@ -216,63 +284,51 @@ threading.Thread(target=start_api, daemon=True).start()
 
 
 # =========================================================
-# INTERFACE STREAMLIT — PORTAL MSE
+# INTERFACE WEB STREAMLIT
 # =========================================================
-
-# Logo no topo
-st.image("LOGO MSE.png", width=160)
-st.markdown("<h1 style='text-align:center; color:#7A0000;'>MSE TRAVEL EXPRESS</h1>", unsafe_allow_html=True)
-
-st.markdown("---")
+st.subheader("Selecione o tipo de cotação:")
 
 tipo = st.selectbox(
-    "Selecione o tipo de cotação:",
-    ["Rodoviário", "Hospedagem", "Veículo", "Cotação Geral"]
+    "Tipo",
+    ["rodoviario", "hospedagem", "veiculo", "geral"]
 )
 
-origem = None
-destino = None
+origem = st.text_input("Origem")
+destino = st.text_input("Destino (Cidade - UF)")
 
-if tipo != "Hospedagem":
-    origem = st.text_input("Origem:")
-
-destino = st.text_input("Destino (Cidade - UF):")
-
-ida = st.date_input("Data de Ida:", date.today())
-volta = st.date_input("Data de Volta:", date.today())
+ida = st.date_input("Data de ida", date.today())
+volta = st.date_input("Data de volta", date.today())
 
 grupo = None
-if tipo in ["Veículo", "Cotação Geral"]:
-    grupo = st.selectbox("Grupo do Veículo:", ["B", "EA"])
+if tipo in ["veiculo", "geral"]:
+    grupo = st.selectbox("Grupo do veículo:", ["B", "EA"])
 
-if st.button("Calcular Cotação"):
-    if tipo == "Rodoviário":
-        st.info(cotar_rodoviario(origem, destino))
-    elif tipo == "Hospedagem":
-        st.info(cotar_hospedagem(destino, ida, volta))
-    elif tipo == "Veículo":
-        st.info(cotar_veiculo(origem, destino, ida, volta, grupo))
+if st.button("Calcular"):
+    if tipo == "rodoviario":
+        st.markdown(cotar_rodoviario(origem, destino))
+    elif tipo == "hospedagem":
+        st.markdown(cotar_hospedagem(destino, ida, volta))
+    elif tipo == "veiculo":
+        st.markdown(cotar_veiculo(origem, destino, ida, volta, grupo))
     else:
-        st.success(cotar_geral(origem, destino, ida, volta, grupo))
+        st.markdown(cotar_geral(origem, destino, ida, volta, grupo))
 
 # =========================================================
-# BLOCO DE SOLICITAÇÃO — SEÇÃO ESPECIAL
+# Seleção de Solicitação
 # =========================================================
-st.markdown("---")
-st.markdown("### 📌 Selecionar solicitação:")
+st.subheader("📌 Selecionar solicitação:")
 
 opcao = st.selectbox(
-    "",
+    "Selecione o que deseja solicitar:",
     ["-- Selecionar --", "Passagem Rodoviária", "Hospedagem", "Veículo"]
 )
 
-# Botão estilizado
-if st.button("📤 Abrir Solicitação"):
-    if opcao == "-- Selecionar --":
-        st.warning("Selecione uma opção.")
-    elif opcao == "Passagem Rodoviária":
-        st.markdown("[Abrir Formulário](https://portalmse.com.br/index.php)")
-    elif opcao == "Veículo":
-        st.markdown("[Abrir Formulário de Veículo](https://docs.google.com/forms/d/e/1FAIpQLSc-ImW1hPShhR0dUT2z77rRN0PJtPw93Pz6EBMkybPJW9r8eg/viewform)")
-    elif opcao == "Hospedagem":
-        st.markdown("[Abrir Formulário de Hospedagem](https://docs.google.com/forms/d/e/1FAIpQLSc7K3xq-fa_Hsw1yLel5pKILUVMM5kzhHbNRPDISGFke6aJ4A/viewform)")
+if opcao != "-- Selecionar --":
+    if st.button("Abrir Solicitação"):
+        if opcao == "Passagem Rodoviária":
+            st.markdown("[Abrir Portal Rodoviário](https://portalmse.com.br/index.php)")
+        elif opcao == "Veículo":
+            st.markdown("[Abrir Solicitação de Veículo](https://docs.google.com/forms/d/e/1FAIpQLSc-ImW1hPShhR0dUT2z77rRN0PJtPw93Pz6EBMkybPJW9r8eg/viewform)")
+        elif opcao == "Hospedagem":
+            st.markdown("[Abrir Solicitação de Hospedagem](https://docs.google.com/forms/d/e/1FAIpQLSc7K3xq-fa_Hsw1yLel5pKILUVMM5kzhHbNRPDISGFke6aJ4A/viewform)")
+     
