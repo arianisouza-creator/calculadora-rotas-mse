@@ -44,8 +44,9 @@ CIDADES_BR = {
     "bh": "Belo Horizonte - MG",
 }
 
+
 # =========================================================
-# FUNÇÕES BASE
+# FUNÇÕES
 # =========================================================
 def ajustar_cidade(cidade):
     if not cidade:
@@ -77,10 +78,8 @@ def calcular_dias(ida, volta):
     return (volta - ida).days or 1
 
 
-# =========================================================
-# VEÍCULO
-# =========================================================
 TABELA_DIARIA = {"B": 151.92, "EA": 203.44}
+
 
 def cotar_veiculo(origem, destino, ida, volta, grupo):
     km = get_km(origem, destino)
@@ -106,9 +105,6 @@ def cotar_veiculo(origem, destino, ida, volta, grupo):
     )
 
 
-# =========================================================
-# HOSPEDAGEM
-# =========================================================
 TABELA_HOSPEDAGEM = {
     "AC": 200, "AL": 200, "AP": 300, "AM": 350,
     "BA": 210, "CE": 350, "DF": 260, "ES": 300,
@@ -118,6 +114,7 @@ TABELA_HOSPEDAGEM = {
     "RS": 280, "RO": 300, "RR": 300, "SC": 300,
     "SP": 350, "SE": 190, "TO": 270
 }
+
 
 def extrair_uf(dest):
     if "-" not in dest:
@@ -136,18 +133,12 @@ def cotar_hospedagem(dest, ida, volta):
     return f"🏨 Hospedagem\n\nUF: {uf}\nDias: {dias}\nTOTAL: R$ {valor:.2f}"
 
 
-# =========================================================
-# RODOVIÁRIO
-# =========================================================
 def cotar_rodoviario(origem, destino):
     km = get_km(origem, destino)
     valor = km * PRECO_KM
     return f"🚌 Rodoviário\n\nDistância: {km:.1f} km\nTOTAL: R$ {valor:.2f}"
 
 
-# =========================================================
-# COTAÇÃO GERAL
-# =========================================================
 def cotar_geral(origem, destino, ida, volta, grupo):
     return (
         cotar_rodoviario(origem, destino)
@@ -159,11 +150,10 @@ def cotar_geral(origem, destino, ida, volta, grupo):
 
 
 # =========================================================
-# FASTAPI BACKEND
+# FASTAPI
 # =========================================================
 app = FastAPI()
 
-# CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -200,9 +190,6 @@ async def api_calc(request: Request):
     return {"resultado": resultado}
 
 
-# =========================================================
-# THREAD PARA RODAR O SERVIDOR
-# =========================================================
 def start_api():
     uvicorn.run(app, host="0.0.0.0", port=8000)
 
@@ -211,26 +198,92 @@ threading.Thread(target=start_api, daemon=True).start()
 
 
 # =========================================================
-# STREAMLIT INTERFACE NORMAL
+# INTERFACE STREAMLIT — CORPORATIVA MSE
 # =========================================================
-st.title("MSE TRAVEL EXPRESS")
 
-tipo = st.selectbox("Tipo", ["rodoviario", "hospedagem", "veiculo", "geral"])
+st.set_page_config(layout="wide")
+
+# ======= CSS corporativo =======
+st.markdown(
+    """
+    <style>
+        body { background-color: white; }
+        .titulo-mse {
+            font-size: 34px;
+            color: #7A0000;
+            font-weight: bold;
+        }
+        .botao-mse {
+            background-color: #7A0000;
+            color: white;
+            padding: 12px 20px;
+            border-radius: 8px;
+            border: none;
+            cursor: pointer;
+            font-size: 18px;
+            margin-right: 10px;
+        }
+        .botao-mse:hover {
+            background-color: #b30000;
+        }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
+# Logo
+st.image("LOGO MSE.png", width=120)
+
+st.markdown("<div class='titulo-mse'>MSE TRAVEL EXPRESS</div>", unsafe_allow_html=True)
+
+st.write("---")
+
+# ======= BOTÕES DO TIPO =======
+col1, col2, col3, col4 = st.columns(4)
+
+tipo = None
+
+with col1:
+    if st.button("Rodoviário", key="rod"):
+        tipo = "rodoviario"
+with col2:
+    if st.button("Hospedagem", key="hosp"):
+        tipo = "hospedagem"
+with col3:
+    if st.button("Veículo", key="vei"):
+        tipo = "veiculo"
+with col4:
+    if st.button("Geral", key="ger"):
+        tipo = "geral"
+
+if not tipo:
+    st.info("Selecione um tipo de cotação acima.")
+    st.stop()
+
+# ======= CAMPOS UNIVERSAIS =======
 origem = st.text_input("Origem")
 destino = st.text_input("Destino (Cidade - UF)")
-ida = st.date_input("Ida", date.today())
-volta = st.date_input("Volta", date.today())
 
+# Se NÃO for rodoviário → habilita datas
+if tipo != "rodoviario":
+    ida = st.date_input("Data de Ida", date.today())
+    volta = st.date_input("Data de Volta", date.today())
+else:
+    ida = None
+    volta = None
+
+# Grupo somente quando for veículo/geral
 grupo = None
 if tipo in ["veiculo", "geral"]:
-    grupo = st.selectbox("Grupo", ["B", "EA"])
+    grupo = st.radio("Grupo do Veículo", ["B", "EA"], horizontal=True)
 
-if st.button("Calcular"):
+# ======= CALCULAR =======
+if st.button("Calcular Cotação", type="primary"):
     if tipo == "rodoviario":
-        st.text(cotar_rodoviario(origem, destino))
+        st.success(cotar_rodoviario(origem, destino))
     elif tipo == "hospedagem":
-        st.text(cotar_hospedagem(destino, ida, volta))
+        st.success(cotar_hospedagem(destino, ida, volta))
     elif tipo == "veiculo":
-        st.text(cotar_veiculo(origem, destino, ida, volta, grupo))
+        st.success(cotar_veiculo(origem, destino, ida, volta, grupo))
     else:
-        st.text(cotar_geral(origem, destino, ida, volta, grupo))
+        st.success(cotar_geral(origem, destino, ida, volta, grupo))
