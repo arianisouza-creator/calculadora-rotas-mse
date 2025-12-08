@@ -1,22 +1,12 @@
-# ============================================================
-# MSE TRAVEL EXPRESS – STREAMLIT + PYTHON + FPDF (SEM ERROS)
-# ============================================================
-
 import streamlit as st
 import requests
 from fpdf import FPDF
-import tempfile
 from datetime import date
+import tempfile
 
-# ============================
-# CONFIGURAÇÕES
-# ============================
 API_KEY = "SUA_API_KEY_GOOGLE"
 PRECO_KM = 0.50
 
-# ============================
-# BANCO DE CIDADES
-# ============================
 CIDADES_BR = {
     "londrina": "Londrina - PR",
     "curitiba": "Curitiba - PR",
@@ -54,18 +44,13 @@ def ajustar_cidade(cidade):
     cidade = cidade.strip().lower()
     return CIDADES_BR.get(cidade, cidade + ", Brasil")
 
-# ============================
-# KM COM GOOGLE MAPS
-# ============================
 def get_km(origem, destino):
     origem = ajustar_cidade(origem)
     destino = ajustar_cidade(destino)
-
     url = (
         "https://maps.googleapis.com/maps/api/distancematrix/json?units=metric"
         f"&origins={origem}&destinations={destino}&key={API_KEY}"
     )
-
     res = requests.get(url).json()
     try:
         elem = res["rows"][0]["elements"][0]
@@ -75,15 +60,9 @@ def get_km(origem, destino):
     except:
         return 0
 
-# ============================
-# CÁLCULO DE DIAS
-# ============================
 def calcular_dias(ida, volta):
     return (volta - ida).days if ida and volta else 1
 
-# ============================
-# VEÍCULO
-# ============================
 TABELA_DIARIA_VEICULO = {
     "B": 151.92,
     "EA": 203.44,
@@ -92,32 +71,23 @@ TABELA_DIARIA_VEICULO = {
 def cotar_veiculo(origem, destino, ida, volta, grupo):
     km = get_km(origem, destino)
     dias = calcular_dias(ida, volta)
-
     diaria = TABELA_DIARIA_VEICULO.get(grupo, 0)
     valor_diarias = diaria * dias
-
     preco_comb = 5.80
     consumo = 13 if grupo == "B" else 9
-
-    km_total = km * 2
-    litros = km_total / consumo
+    litros = (km * 2) / consumo
     valor_comb = litros * preco_comb
-
     total = valor_diarias + valor_comb
 
     texto = f"""
-🚗 LOCAÇÃO DE VEÍCULO
+LOCAÇÃO DE VEÍCULO
 Dias: {dias}
 Diárias: R$ {valor_diarias:.2f}
 Combustível: R$ {valor_comb:.2f}
-
 TOTAL: R$ {total:.2f}
 """
-    return texto, total
+    return texto
 
-# ============================
-# HOSPEDAGEM
-# ============================
 TABELA_HOSPEDAGEM = {
     "AC": 200, "AL": 200, "AP": 300, "AM": 350,
     "BA": 210, "CE": 350, "DF": 260, "ES": 300,
@@ -133,40 +103,29 @@ def extrair_uf(dest):
         return None
     return dest.split("-")[1].strip().upper()
 
-def cotar_hospedagem(destino, ida, volta):
-    uf = extrair_uf(destino)
+def cotar_hospedagem(dest, ida, volta):
+    uf = extrair_uf(dest)
     if not uf or uf not in TABELA_HOSPEDAGEM:
-        return "UF inválida. Use formato Cidade - UF.", 0
-
+        return "UF inválida."
     dias = calcular_dias(ida, volta) + 1
-    diaria = TABELA_HOSPEDAGEM[uf]
-    total = diaria * dias
+    total = dias * TABELA_HOSPEDAGEM[uf]
 
-    texto = f"""
-🏨 HOSPEDAGEM
+    return f"""
+HOSPEDAGEM
 UF: {uf}
 Diárias: {dias}
 TOTAL: R$ {total:.2f}
 """
-    return texto, total
 
-# ============================
-# RODOVIÁRIO
-# ============================
 def cotar_rodoviario(origem, destino):
     km = get_km(origem, destino)
     total = km * PRECO_KM
-
-    texto = f"""
-🚌 RODOVIÁRIO
+    return f"""
+RODOVIÁRIO
 Distância: {km:.1f} km
 TOTAL: R$ {total:.2f}
 """
-    return texto, total
 
-# ============================
-# GERAR PDF (FPDF)
-# ============================
 def gerar_pdf(texto):
     pdf = FPDF()
     pdf.add_page()
@@ -179,42 +138,38 @@ def gerar_pdf(texto):
     pdf.output(tmp.name)
     return tmp.name
 
-# ============================
-# INTERFACE STREAMLIT
-# ============================
 st.title("MSE TRAVEL EXPRESS")
 
-opcao = st.selectbox("Selecione o tipo:", ["Rodoviário", "Hospedagem", "Veículo", "Cotação Geral"])
-
+opcao = st.selectbox("Escolha:", ["Rodoviário", "Hospedagem", "Veículo", "Cotação Geral"])
 origem = st.text_input("Origem")
-destino = st.text_input("Destino (Ex: Curitiba - PR)")
+destino = st.text_input("Destino (Cidade - UF)")
 
-ida = st.date_input("Data de ida", date.today())
-volta = st.date_input("Data de volta", date.today())
+ida = st.date_input("Ida", date.today())
+volta = st.date_input("Volta", date.today())
 
 grupo = None
 if opcao in ["Veículo", "Cotação Geral"]:
-    grupo = st.selectbox("Grupo do veículo", ["B", "EA"])
+    grupo = st.selectbox("Grupo", ["B", "EA"])
 
 if st.button("Calcular"):
     if opcao == "Rodoviário":
-        texto, _ = cotar_rodoviario(origem, destino)
-
+        texto = cotar_rodoviario(origem, destino)
     elif opcao == "Hospedagem":
-        texto, _ = cotar_hospedagem(destino, ida, volta)
-
+        texto = cotar_hospedagem(destino, ida, volta)
     elif opcao == "Veículo":
-        texto, _ = cotar_veiculo(origem, destino, ida, volta, grupo)
-
+        texto = cotar_veiculo(origem, destino, ida, volta, grupo)
     else:
-        rod, _ = cotar_rodoviario(origem, destino)
-        hosp, _ = cotar_hospedagem(destino, ida, volta)
-        vei, _ = cotar_veiculo(origem, destino, ida, volta, grupo)
-        texto = f"{rod}\n\n{hosp}\n\n{vei}"
+        texto = (
+            cotar_rodoviario(origem, destino)
+            + "\n"
+            + cotar_hospedagem(destino, ida, volta)
+            + "\n"
+            + cotar_veiculo(origem, destino, ida, volta, grupo)
+        )
 
     st.text(texto)
 
-    if st.button("Gerar PDF"):
+    if st.button("Baixar PDF"):
         pdf_file = gerar_pdf(texto)
         with open(pdf_file, "rb") as f:
-            st.download_button("📄 Baixar PDF", f, "cotacao_mse.pdf")
+            st.download_button("Clique para baixar", f, "cotacao.pdf")
