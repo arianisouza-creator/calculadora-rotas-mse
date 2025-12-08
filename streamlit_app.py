@@ -5,40 +5,6 @@ from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 import requests
 from datetime import datetime, date
-import base64
-from io import BytesIO
-from PIL import Image
-
-# =========================================================
-# LOGO MSE BASE64 — COLE OS 3 BLOCOS AQUI DENTRO
-# =========================================================
-LOGO_MSE_BASE64 = """
-iVBORw0KGgoAAAANSUhEUgAAAYAAAACgCAYAAACfF6X6AAAACXBIWXMAAAsTAAALEwEAmpwYAAAK
-T2lDQ1BQaG90b3Nob3AgSUNDIHByb2ZpbGUAAHjanVNnVFPZHb934XOSyDYYZICQRAhJCIiAiEi
-iIgIiIgISIgIiKgICJyoCCSIiICEiICIiAiIiAgIkAgEhISCEiAiIiAgIiAiAggkAjhvL/fe96X
-7959z7mxAMBiIyQSEeP/7etuAxhNpMMEMGASCMF
-c2ZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZ
-mZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZ
-mZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZ
-mZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZ
-mZmZmZmZmZmZmf///wAAAP//AAD///8AAAD//wAA//8AAAD//wAA//8AAAD//wAA//8AAAD//wAA
-//8AAAD//wAA//8AAAD//wAA//8AAAD//wAA//8AAAD//wAA//8AAAD//wAA//8AAAD//wAA//8A
-AAD//wAA//8AAAD//wAA//8AAAD//wAA//8AAAD//wAA//8AAAD//wAA//8AAAD//wAA//8AAAD/
-//8AAAD//wAA//8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
-AAAAAElFTkSuQmCC
-"""
-
-# Função que transforma base64 em imagem
-def carregar_logo():
-    try:
-        img_bytes = base64.b64decode(LOGO_MSE_BASE64)
-        return Image.open(BytesIO(img_bytes))
-    except Exception as e:
-        st.error(f"Erro ao carregar a logo: {e}")
-        return None
 
 # =========================================================
 # CONFIGURAÇÕES
@@ -86,10 +52,12 @@ def ajustar_cidade(cidade):
 def get_km(origem, destino):
     origem = ajustar_cidade(origem)
     destino = ajustar_cidade(destino)
+
     url = (
         "https://maps.googleapis.com/maps/api/distancematrix/json?units=metric"
         f"&origins={origem}&destinations={destino}&key={API_KEY}"
     )
+
     try:
         res = requests.get(url).json()
         elem = res["rows"][0]["elements"][0]
@@ -112,10 +80,13 @@ def cotar_veiculo(origem, destino, ida, volta, grupo):
     dias = calcular_dias(ida, volta)
     diaria = TABELA_DIARIA.get(grupo, 0)
     valor_diarias = diaria * dias
+
     consumo = 13 if grupo == "B" else 9
     preco_comb = 5.80
+
     litros = (km * 2) / consumo
     valor_comb = litros * preco_comb
+
     total = valor_diarias + valor_comb
 
     return (
@@ -148,13 +119,12 @@ def cotar_hospedagem(dest, ida, volta):
     uf = extrair_uf(dest)
     if not uf or uf not in TABELA_HOSPEDAGEM:
         return "Destino inválido."
+
     dias = calcular_dias(ida, volta) + 1
     valor = dias * TABELA_HOSPEDAGEM[uf]
+
     return (
-        f"🏨 HOSPEDAGEM\n\n"
-        f"UF: {uf}\n"
-        f"Dias: {dias}\n"
-        f"TOTAL: R$ {valor:.2f}"
+        f"🏨 HOSPEDAGEM\n\nUF: {uf}\nDias: {dias}\nTOTAL: R$ {valor:.2f}"
     )
 
 # =========================================================
@@ -164,9 +134,7 @@ def cotar_rodoviario(origem, destino):
     km = get_km(origem, destino)
     valor = km * PRECO_KM
     return (
-        f"🚌 RODOVIÁRIO\n\n"
-        f"Distância: {km:.1f} km\n"
-        f"TOTAL: R$ {valor:.2f}"
+        f"🚌 RODOVIÁRIO\n\nDistância: {km:.1f} km\nTOTAL: R$ {valor:.2f}"
     )
 
 # =========================================================
@@ -182,7 +150,7 @@ def cotar_geral(origem, destino, ida, volta, grupo):
     )
 
 # =========================================================
-# FASTAPI
+# FASTAPI BACKEND
 # =========================================================
 app = FastAPI()
 
@@ -226,33 +194,21 @@ def start_api():
 threading.Thread(target=start_api, daemon=True).start()
 
 # =========================================================
-# INTERFACE STREAMLIT
+# INTERFACE STREAMLIT - CORPORATIVA
 # =========================================================
 st.set_page_config(layout="wide")
 
-# CSS MSE
-st.markdown("""
-<style>
-body { background-color: white; }
-.titulo-mse {
-    font-size: 34px;
-    color: #7A0000;
-    font-weight: bold;
-}
-</style>
-""", unsafe_allow_html=True)
+# LOADING LOGO
+try:
+    st.image("assets/logo_mse.png", width=120)
+except:
+    st.error("Erro ao carregar a logo (verifique assets/logo_mse.png).")
 
-# LOGO
-logo = carregar_logo()
-if logo:
-    st.image(logo, width=120)
-else:
-    st.error("Erro ao carregar a logo!")
-
-st.markdown("<div class='titulo-mse'>MSE TRAVEL EXPRESS</div>", unsafe_allow_html=True)
+# TÍTULO
+st.markdown("<h1 style='color:#7A0000;'>MSE TRAVEL EXPRESS</h1>", unsafe_allow_html=True)
 st.write("---")
 
-# BOTÕES
+# BOTÕES DO MENU
 col1, col2, col3, col4 = st.columns(4)
 
 tipo = None
@@ -273,28 +229,30 @@ if not tipo:
     st.info("Selecione uma opção acima.")
     st.stop()
 
-# CAMPOS
+# CAMPOS DO FORMULÁRIO
 origem = st.text_input("Origem")
 destino = st.text_input("Destino (Cidade - UF)")
 
 if tipo != "rodoviario":
-    ida = st.date_input("Data de Ida", date.today())
-    volta = st.date_input("Data de Volta", date.today())
+    ida = st.date_input("Data de ida", date.today())
+    volta = st.date_input("Data de volta", date.today())
 else:
     ida, volta = None, None
 
 grupo = None
 if tipo in ["veiculo", "geral"]:
-    grupo = st.radio("Grupo do Veículo", ["B", "EA"], horizontal=True)
+    grupo = st.radio("Grupo do veículo", ["B", "EA"], horizontal=True)
 
-# CALCULAR
-if st.button("Calcular Cotação", type="primary"):
+# BOTÃO DE CÁLCULO
+if st.button("Calcular", type="primary"):
     if tipo == "rodoviario":
         st.success(cotar_rodoviario(origem, destino))
+
     elif tipo == "hospedagem":
         st.success(cotar_hospedagem(destino, ida, volta))
+
     elif tipo == "veiculo":
         st.success(cotar_veiculo(origem, destino, ida, volta, grupo))
-    else:
-        st.success(cotar_geral(origem, destino, ida, volta, grupo))
 
+    elif tipo == "geral":
+        st.success(cotar_geral(origem, destino, ida, volta, grupo))
