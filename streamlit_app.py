@@ -4,8 +4,10 @@
 
 import streamlit as st
 import requests
-import pdfkit
+from reportlab.lib.pagesizes import letter
+from reportlab.pdfgen import canvas
 import tempfile
+from datetime import date
 
 # ============================
 # CONFIGURAÇÕES
@@ -53,7 +55,6 @@ def ajustar_cidade(cidade):
     cidade = cidade.strip().lower()
     return CIDADES_BR.get(cidade, cidade + ", Brasil")
 
-
 # ============================
 # KM COM GOOGLE MAPS
 # ============================
@@ -68,22 +69,18 @@ def get_km(origem, destino):
 
     res = requests.get(url).json()
     try:
-        elemento = res["rows"][0]["elements"][0]
-        if elemento["status"] != "OK":
+        elem = res["rows"][0]["elements"][0]
+        if elem["status"] != "OK":
             return 0
-        return elemento["distance"]["value"] / 1000
+        return elem["distance"]["value"] / 1000
     except:
         return 0
-
 
 # ============================
 # CÁLCULO DE DIAS
 # ============================
 def calcular_dias(ida, volta):
-    if not ida or not volta:
-        return 1
-    return (volta - ida).days
-
+    return (volta - ida).days if ida and volta else 1
 
 # ============================
 # VEÍCULO
@@ -108,15 +105,16 @@ def cotar_veiculo(origem, destino, ida, volta, grupo):
 
     total = valor_diarias + valor_comb
 
-    html = f"""
-    <h3>🚗 Locação de Veículo</h3>
-    Dias: <b>{dias}</b><br>
-    Diárias: R$ {valor_diarias:.2f}<br>
-    Combustível: R$ {valor_comb:.2f}<br><br>
-    <b>TOTAL: R$ {total:.2f}</b>
-    """
-    return html, total
+    texto = f"""
+🚗 **Locação de Veículo**
 
+- Dias: **{dias}**
+- Valor diárias: **R$ {valor_diarias:.2f}**
+- Combustível: **R$ {valor_comb:.2f}**
+
+### 💰 TOTAL: R$ {total:.2f}
+"""
+    return texto, total
 
 # ============================
 # HOSPEDAGEM
@@ -131,28 +129,28 @@ TABELA_HOSPEDAGEM = {
     "SP": 350, "SE": 190, "TO": 270,
 }
 
-def extrair_uf(destino):
-    if "-" not in destino:
+def extrair_uf(dest):
+    if "-" not in dest:
         return None
-    return destino.split("-")[1].strip().upper()
+    return dest.split("-")[1].strip().upper()
 
 def cotar_hospedagem(destino, ida, volta):
     uf = extrair_uf(destino)
     if not uf or uf not in TABELA_HOSPEDAGEM:
-        return "<b>❌ UF inválida. Use: Cidade - UF</b>", 0
+        return "**❌ UF inválida. Use formato Cidade - UF.**", 0
 
-    diaria = TABELA_HOSPEDAGEM[uf]
     dias = calcular_dias(ida, volta) + 1
+    diaria = TABELA_HOSPEDAGEM[uf]
     total = diaria * dias
 
-    html = f"""
-    <h3>🏨 Hospedagem</h3>
-    UF: {uf}<br>
-    Diárias: {dias}<br><br>
-    <b>Total: R$ {total:.2f}</b>
-    """
-    return html, total
+    texto = f"""
+🏨 **Hospedagem**
 
+- UF: **{uf}**
+- Diárias: **{dias}**
+- Total: **R$ {total:.2f}**
+"""
+    return texto, total
 
 # ============================
 # RODOVIÁRIO
@@ -161,65 +159,65 @@ def cotar_rodoviario(origem, destino):
     km = get_km(origem, destino)
     total = km * PRECO_KM
 
-    html = f"""
-    <h3>🚌 Passagem Rodoviária</h3>
-    KM: {km:.1f}<br>
-    Total: R$ {total:.2f}
-    """
-    return html, total
+    texto = f"""
+🚌 **Passagem Rodoviária**
 
+- Distância: **{km:.1f} km**
+- Total: **R$ {total:.2f}**
+"""
+    return texto, total
 
 # ============================
-# PDF
+# GERAR PDF COM REPORTLAB
 # ============================
-def gerar_pdf(html_content):
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
-        pdfkit.from_string(html_content, tmp.name)
-        return tmp.name
+def gerar_pdf(texto):
+    temp = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
+    c = canvas.Canvas(temp.name, pagesize=letter)
 
+    y = 750
+    for linha in texto.split("\n"):
+        c.drawString(40, y, linha)
+        y -= 20
+
+    c.save()
+    return temp.name
 
 # ============================
 # INTERFACE STREAMLIT
 # ============================
 st.title("MSE TRAVEL EXPRESS")
 
-opcao = st.selectbox(
-    "Selecione a cotação:",
-    ["Rodoviário", "Hospedagem", "Veículo", "Cotação Geral"]
-)
+opcao = st.selectbox("Selecione a cotação:", ["Rodoviário", "Hospedagem", "Veículo", "Cotação Geral"])
 
 origem = st.text_input("Origem")
 destino = st.text_input("Destino (Ex: Curitiba - PR)")
 
-ida = st.date_input("Data ida")
-volta = st.date_input("Data volta")
+ida = st.date_input("Data ida", date.today())
+volta = st.date_input("Data volta", date.today())
 
 grupo = None
 if opcao in ["Veículo", "Cotação Geral"]:
-    grupo = st.selectbox("Grupo veículo:", ["B", "EA"])
+    grupo = st.selectbox("Grupo do veículo", ["B", "EA"])
 
-if st.button("CALCULAR"):
-    resultado = ""
-
+if st.button("Calcular"):
     if opcao == "Rodoviário":
-        resultado, _ = cotar_rodoviario(origem, destino)
+        texto, _ = cotar_rodoviario(origem, destino)
 
     elif opcao == "Hospedagem":
-        resultado, _ = cotar_hospedagem(destino, ida, volta)
+        texto, _ = cotar_hospedagem(destino, ida, volta)
 
     elif opcao == "Veículo":
-        resultado, _ = cotar_veiculo(origem, destino, ida, volta, grupo)
+        texto, _ = cotar_veiculo(origem, destino, ida, volta, grupo)
 
-    elif opcao == "Cotação Geral":
+    else:
         rod, _ = cotar_rodoviario(origem, destino)
         hosp, _ = cotar_hospedagem(destino, ida, volta)
         vei, _ = cotar_veiculo(origem, destino, ida, volta, grupo)
+        texto = f"**COTAÇÃO GERAL**\n\n{rod}\n\n{hosp}\n\n{vei}"
 
-        resultado = f"<h2>COTAÇÃO GERAL</h2>{rod}<hr>{hosp}<hr>{vei}"
+    st.markdown(texto)
 
-    st.markdown(resultado, unsafe_allow_html=True)
-
-    if st.button("Gerar PDF"):
-        pdf_path = gerar_pdf(resultado)
-        with open(pdf_path, "rb") as f:
-            st.download_button("📄 Baixar PDF", f, file_name="Cotacao_MSE.pdf")
+    if st.button("📄 Baixar PDF"):
+        pdf_file = gerar_pdf(texto)
+        with open(pdf_file, "rb") as f:
+            st.download_button("Clique para baixar", f, file_name="cotacao_mse.pdf")
