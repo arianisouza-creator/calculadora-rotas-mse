@@ -4,35 +4,8 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 import requests
+import json
 from datetime import datetime, date
-from PIL import Image
-import base64
-from io import BytesIO
-
-# =========================================================
-# FUNÇÃO PARA BOTÕES DE LINK (FUNCIONA EM QUALQUER STREAMLIT)
-# =========================================================
-def abrir_link(url, texto):
-    st.markdown(
-        f"""
-        <a href="{url}" target="_blank">
-            <button style="
-                background-color:#7A0000;
-                color:white;
-                border:none;
-                padding:12px 20px;
-                font-size:16px;
-                border-radius:8px;
-                cursor:pointer;
-                width:100%;
-                margin-top:10px;
-            ">
-                {texto}
-            </button>
-        </a>
-        """,
-        unsafe_allow_html=True
-    )
 
 # =========================================================
 # CONFIGURAÇÕES
@@ -103,6 +76,7 @@ def calcular_dias(ida, volta):
         return 1
     return (volta - ida).days or 1
 
+
 # =========================================================
 # VEÍCULO
 # =========================================================
@@ -124,12 +98,13 @@ def cotar_veiculo(origem, destino, ida, volta, grupo):
     total = valor_diarias + valor_comb
 
     return (
-        f"🚗 Veículo\n\n"
-        f"Dias: {dias}\n"
-        f"Diárias: R$ {valor_diarias:.2f}\n"
-        f"Combustível: R$ {valor_comb:.2f}\n\n"
-        f"TOTAL: R$ {total:.2f}"
+        f"🚗 **Locação de Veículo**\n\n"
+        f"- Dias: **{dias}**\n"
+        f"- Valor das diárias: **R$ {valor_diarias:.2f}**\n"
+        f"- Combustível: **R$ {valor_comb:.2f}**\n\n"
+        f"### 💰 TOTAL: R$ {total:.2f}"
     )
+
 
 # =========================================================
 # HOSPEDAGEM
@@ -159,11 +134,12 @@ def cotar_hospedagem(dest, ida, volta):
     valor = dias * TABELA_HOSPEDAGEM[uf]
 
     return (
-        f"🏨 Hospedagem\n\n"
-        f"UF: {uf}\n"
-        f"Dias: {dias}\n"
-        f"TOTAL: R$ {valor:.2f}"
+        f"🏨 **Hospedagem**\n\n"
+        f"- UF: **{uf}**\n"
+        f"- Diárias: **{dias}**\n\n"
+        f"### TOTAL: R$ {valor:.2f}"
     )
+
 
 # =========================================================
 # RODOVIÁRIO
@@ -172,22 +148,22 @@ def cotar_rodoviario(origem, destino):
     km = get_km(origem, destino)
     valor = km * PRECO_KM
     return (
-        f"🚌 Rodoviário\n\n"
-        f"Distância: {km:.1f} km\n"
-        f"TOTAL: R$ {valor:.2f}"
+        f"🚌 **Passagem Rodoviária**\n\n"
+        f"- Distância: **{km:.1f} km**\n"
+        f"### TOTAL: R$ {valor:.2f}"
     )
+
 
 # =========================================================
 # COTAÇÃO GERAL
 # =========================================================
 def cotar_geral(origem, destino, ida, volta, grupo):
     return (
-        cotar_rodoviario(origem, destino)
-        + "\n\n"
-        + cotar_hospedagem(destino, ida, volta)
-        + "\n\n"
-        + cotar_veiculo(origem, destino, ida, volta, grupo)
+        f"{cotar_rodoviario(origem, destino)}\n\n---\n\n"
+        f"{cotar_hospedagem(destino, ida, volta)}\n\n---\n\n"
+        f"{cotar_veiculo(origem, destino, ida, volta, grupo)}"
     )
+
 
 # =========================================================
 # FASTAPI BACKEND
@@ -200,6 +176,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 
 @app.post("/api")
 async def api_calc(request: Request):
@@ -228,100 +205,74 @@ async def api_calc(request: Request):
 
     return {"resultado": resultado}
 
+
 # =========================================================
-# THREAD API
+# THREAD PARA RODAR API
 # =========================================================
 def start_api():
     uvicorn.run(app, host="0.0.0.0", port=8000)
 
 threading.Thread(target=start_api, daemon=True).start()
 
+
 # =========================================================
-# INTERFACE STREAMLIT
+# INTERFACE STREAMLIT — PORTAL MSE
 # =========================================================
 
-st.set_page_config(page_title="MSE Travel Express", layout="centered")
+# Logo no topo
+st.image("LOGO MSE.png", width=160)
+st.markdown("<h1 style='text-align:center; color:#7A0000;'>MSE TRAVEL EXPRESS</h1>", unsafe_allow_html=True)
 
-# LOGO
-try:
-    logo = Image.open("LOGO MSE.png")
-    st.image(logo, width=160)
-except:
-    st.error("Não foi possível carregar a LOGO MSE.png.")
+st.markdown("---")
 
-# TÍTULO
-st.markdown(
-    "<h1 style='text-align:center; color:#7A0000;'>MSE TRAVEL EXPRESS</h1>",
-    unsafe_allow_html=True,
-)
-
-st.write("---")
-
-# MENU
 tipo = st.selectbox(
     "Selecione o tipo de cotação:",
-    ["rodoviario", "hospedagem", "veiculo", "geral"],
+    ["Rodoviário", "Hospedagem", "Veículo", "Cotação Geral"]
 )
 
-origem = st.text_input("Origem")
-destino = st.text_input("Destino (Cidade - UF)")
+origem = None
+destino = None
 
-ida = st.date_input("Ida", date.today())
-volta = st.date_input("Volta", date.today())
+if tipo != "Hospedagem":
+    origem = st.text_input("Origem:")
+
+destino = st.text_input("Destino (Cidade - UF):")
+
+ida = st.date_input("Data de Ida:", date.today())
+volta = st.date_input("Data de Volta:", date.today())
 
 grupo = None
-if tipo in ["veiculo", "geral"]:
-    grupo = st.selectbox("Grupo", ["B", "EA"])
+if tipo in ["Veículo", "Cotação Geral"]:
+    grupo = st.selectbox("Grupo do Veículo:", ["B", "EA"])
 
-# BOTÃO DE COTAÇÃO
-if st.button("CALCULAR", use_container_width=True):
-    st.write("---")
-    st.markdown("### 📌 Resultado:")
-
-    if tipo == "rodoviario":
-        st.success(cotar_rodoviario(origem, destino))
-
-    elif tipo == "hospedagem":
-        st.success(cotar_hospedagem(destino, ida, volta))
-
-    elif tipo == "veiculo":
-        st.success(cotar_veiculo(origem, destino, ida, volta, grupo))
-
-    elif tipo == "geral":
+if st.button("Calcular Cotação"):
+    if tipo == "Rodoviário":
+        st.info(cotar_rodoviario(origem, destino))
+    elif tipo == "Hospedagem":
+        st.info(cotar_hospedagem(destino, ida, volta))
+    elif tipo == "Veículo":
+        st.info(cotar_veiculo(origem, destino, ida, volta, grupo))
+    else:
         st.success(cotar_geral(origem, destino, ida, volta, grupo))
 
 # =========================================================
-# SOLICITAÇÕES PARA "COTAÇÃO GERAL"
+# BLOCO DE SOLICITAÇÃO — SEÇÃO ESPECIAL
 # =========================================================
-if tipo == "geral":
-    st.write("---")
-    st.markdown("### 📝 Selecionar solicitação:")
+st.markdown("---")
+st.markdown("### 📌 Selecionar solicitação:")
 
-    opcao = st.selectbox(
-        "",
-        [
-            "-- Selecionar --",
-            "Passagem Rodoviária",
-            "Hospedagem",
-            "Veículo",
-        ],
-    )
+opcao = st.selectbox(
+    "",
+    ["-- Selecionar --", "Passagem Rodoviária", "Hospedagem", "Veículo"]
+)
 
-    if opcao == "Passagem Rodoviária":
-        abrir_link(
-            "https://portalmse.com.br/index.php",
-            "Abrir Solicitação de Passagem Rodoviária"
-        )
-
-    elif opcao == "Hospedagem":
-        abrir_link(
-            "https://docs.google.com/forms/d/e/1FAIpQLSc7K3xq-fa_Hsw1yLel5pKILUVMM5kzhHbNRPDISGFke6aJ4A/viewform",
-            "Abrir Solicitação de Hospedagem"
-        )
-
+# Botão estilizado
+if st.button("📤 Abrir Solicitação"):
+    if opcao == "-- Selecionar --":
+        st.warning("Selecione uma opção.")
+    elif opcao == "Passagem Rodoviária":
+        st.markdown("[Abrir Formulário](https://portalmse.com.br/index.php)")
     elif opcao == "Veículo":
-        abrir_link(
-            "https://docs.google.com/forms/d/e/1FAIpQLSc-ImW1hPShhR0dUT2z77rRN0PJtPw93Pz6EBMkybPJW9r8eg/viewform",
-            "Abrir Solicitação de Veículo"
-        )
-
+        st.markdown("[Abrir Formulário de Veículo](https://docs.google.com/forms/d/e/1FAIpQLSc-ImW1hPShhR0dUT2z77rRN0PJtPw93Pz6EBMkybPJW9r8eg/viewform)")
+    elif opcao == "Hospedagem":
+        st.markdown("[Abrir Formulário de Hospedagem](https://docs.google.com/forms/d/e/1FAIpQLSc7K3xq-fa_Hsw1yLel5pKILUVMM5kzhHbNRPDISGFke6aJ4A/viewform)")
