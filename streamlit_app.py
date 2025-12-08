@@ -304,7 +304,6 @@ if tipo == "geral":
             "Passagem Rodoviária",
             "Hospedagem",
             "Veículo",
-            "Hospedagem + Veículo",
         ],
     )
 
@@ -325,3 +324,4 @@ if tipo == "geral":
             "https://docs.google.com/forms/d/e/1FAIpQLSc-ImW1hPShhR0dUT2z77rRN0PJtPw93Pz6EBMkybPJW9r8eg/viewform",
             "Abrir Solicitação de Veículo"
         )
+
