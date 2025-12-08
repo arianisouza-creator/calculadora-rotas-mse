@@ -16,8 +16,8 @@ LOGO_MSE_BASE64 = """
 iVBORw0KGgoAAAANSUhEUgAAAYAAAACgCAYAAACfF6X6AAAACXBIWXMAAAsTAAALEwEAmpwYAAAK
 T2lDQ1BQaG90b3Nob3AgSUNDIHByb2ZpbGUAAHjanVNnVFPZHb934XOSyDYYZICQRAhJCIiAiEi
 iIgIiIgISIgIiKgICJyoCCSIiICEiICIiAiIiAgIkAgEhISCEiAiIiAgIiAiAggkAjhvL/fe96X
-7959z7mxAMBiIyQSEeP/7etuAxhNpMMEMGASCMF...
-…c2ZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZ
+7959z7mxAMBiIyQSEeP/7etuAxhNpMMEMGASCMF
+c2ZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZ
 mZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZ
 mZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZ
 mZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZ
@@ -297,3 +297,4 @@ if st.button("Calcular Cotação", type="primary"):
         st.success(cotar_veiculo(origem, destino, ida, volta, grupo))
     else:
         st.success(cotar_geral(origem, destino, ida, volta, grupo))
+
