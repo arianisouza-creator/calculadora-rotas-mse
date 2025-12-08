@@ -4,7 +4,7 @@ from fpdf import FPDF
 from datetime import date
 import tempfile
 
-API_KEY = "SUA_API_KEY_GOOGLE"
+API_KEY = "AIzaSyA6B_wPkGZ0-jMoKxahLLpwhWFiyLdmxFk"
 PRECO_KM = 0.50
 
 CIDADES_BR = {
@@ -173,3 +173,4 @@ if st.button("Calcular"):
         pdf_file = gerar_pdf(texto)
         with open(pdf_file, "rb") as f:
             st.download_button("Clique para baixar", f, "cotacao.pdf")
+
