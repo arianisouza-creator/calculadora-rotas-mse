@@ -1,18 +1,17 @@
 # ============================================================
-# MSE TRAVEL EXPRESS – SISTEMA COMPLETO (STREAMLIT + PYTHON)
+# MSE TRAVEL EXPRESS – STREAMLIT + PYTHON + FPDF (SEM ERROS)
 # ============================================================
 
 import streamlit as st
 import requests
-from reportlab.lib.pagesizes import letter
-from reportlab.pdfgen import canvas
+from fpdf import FPDF
 import tempfile
 from datetime import date
 
 # ============================
 # CONFIGURAÇÕES
 # ============================
-API_KEY = "SUA_API_KEY_DO_GOOGLE"
+API_KEY = "SUA_API_KEY_GOOGLE"
 PRECO_KM = 0.50
 
 # ============================
@@ -93,9 +92,10 @@ TABELA_DIARIA_VEICULO = {
 def cotar_veiculo(origem, destino, ida, volta, grupo):
     km = get_km(origem, destino)
     dias = calcular_dias(ida, volta)
-    diaria = TABELA_DIARIA_VEICULO.get(grupo, 0)
 
+    diaria = TABELA_DIARIA_VEICULO.get(grupo, 0)
     valor_diarias = diaria * dias
+
     preco_comb = 5.80
     consumo = 13 if grupo == "B" else 9
 
@@ -106,13 +106,12 @@ def cotar_veiculo(origem, destino, ida, volta, grupo):
     total = valor_diarias + valor_comb
 
     texto = f"""
-🚗 **Locação de Veículo**
+🚗 LOCAÇÃO DE VEÍCULO
+Dias: {dias}
+Diárias: R$ {valor_diarias:.2f}
+Combustível: R$ {valor_comb:.2f}
 
-- Dias: **{dias}**
-- Valor diárias: **R$ {valor_diarias:.2f}**
-- Combustível: **R$ {valor_comb:.2f}**
-
-### 💰 TOTAL: R$ {total:.2f}
+TOTAL: R$ {total:.2f}
 """
     return texto, total
 
@@ -137,18 +136,17 @@ def extrair_uf(dest):
 def cotar_hospedagem(destino, ida, volta):
     uf = extrair_uf(destino)
     if not uf or uf not in TABELA_HOSPEDAGEM:
-        return "**❌ UF inválida. Use formato Cidade - UF.**", 0
+        return "UF inválida. Use formato Cidade - UF.", 0
 
     dias = calcular_dias(ida, volta) + 1
     diaria = TABELA_HOSPEDAGEM[uf]
     total = diaria * dias
 
     texto = f"""
-🏨 **Hospedagem**
-
-- UF: **{uf}**
-- Diárias: **{dias}**
-- Total: **R$ {total:.2f}**
+🏨 HOSPEDAGEM
+UF: {uf}
+Diárias: {dias}
+TOTAL: R$ {total:.2f}
 """
     return texto, total
 
@@ -160,40 +158,39 @@ def cotar_rodoviario(origem, destino):
     total = km * PRECO_KM
 
     texto = f"""
-🚌 **Passagem Rodoviária**
-
-- Distância: **{km:.1f} km**
-- Total: **R$ {total:.2f}**
+🚌 RODOVIÁRIO
+Distância: {km:.1f} km
+TOTAL: R$ {total:.2f}
 """
     return texto, total
 
 # ============================
-# GERAR PDF COM REPORTLAB
+# GERAR PDF (FPDF)
 # ============================
 def gerar_pdf(texto):
-    temp = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
-    c = canvas.Canvas(temp.name, pagesize=letter)
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Arial", size=12)
 
-    y = 750
     for linha in texto.split("\n"):
-        c.drawString(40, y, linha)
-        y -= 20
+        pdf.cell(0, 10, txt=linha, ln=True)
 
-    c.save()
-    return temp.name
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
+    pdf.output(tmp.name)
+    return tmp.name
 
 # ============================
 # INTERFACE STREAMLIT
 # ============================
 st.title("MSE TRAVEL EXPRESS")
 
-opcao = st.selectbox("Selecione a cotação:", ["Rodoviário", "Hospedagem", "Veículo", "Cotação Geral"])
+opcao = st.selectbox("Selecione o tipo:", ["Rodoviário", "Hospedagem", "Veículo", "Cotação Geral"])
 
 origem = st.text_input("Origem")
 destino = st.text_input("Destino (Ex: Curitiba - PR)")
 
-ida = st.date_input("Data ida", date.today())
-volta = st.date_input("Data volta", date.today())
+ida = st.date_input("Data de ida", date.today())
+volta = st.date_input("Data de volta", date.today())
 
 grupo = None
 if opcao in ["Veículo", "Cotação Geral"]:
@@ -213,11 +210,11 @@ if st.button("Calcular"):
         rod, _ = cotar_rodoviario(origem, destino)
         hosp, _ = cotar_hospedagem(destino, ida, volta)
         vei, _ = cotar_veiculo(origem, destino, ida, volta, grupo)
-        texto = f"**COTAÇÃO GERAL**\n\n{rod}\n\n{hosp}\n\n{vei}"
+        texto = f"{rod}\n\n{hosp}\n\n{vei}"
 
-    st.markdown(texto)
+    st.text(texto)
 
-    if st.button("📄 Baixar PDF"):
+    if st.button("Gerar PDF"):
         pdf_file = gerar_pdf(texto)
         with open(pdf_file, "rb") as f:
-            st.download_button("Clique para baixar", f, file_name="cotacao_mse.pdf")
+            st.download_button("📄 Baixar PDF", f, "cotacao_mse.pdf")
