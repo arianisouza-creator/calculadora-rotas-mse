@@ -5,6 +5,40 @@ from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 import requests
 from datetime import datetime, date
+import base64
+from io import BytesIO
+from PIL import Image
+
+# =========================================================
+# LOGO MSE BASE64 — COLE OS 3 BLOCOS AQUI DENTRO
+# =========================================================
+LOGO_MSE_BASE64 = """
+iVBORw0KGgoAAAANSUhEUgAAAYAAAACgCAYAAACfF6X6AAAACXBIWXMAAAsTAAALEwEAmpwYAAAK
+T2lDQ1BQaG90b3Nob3AgSUNDIHByb2ZpbGUAAHjanVNnVFPZHb934XOSyDYYZICQRAhJCIiAiEi
+iIgIiIgISIgIiKgICJyoCCSIiICEiICIiAiIiAgIkAgEhISCEiAiIiAgIiAiAggkAjhvL/fe96X
+7959z7mxAMBiIyQSEeP/7etuAxhNpMMEMGASCMF...
+…c2ZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZ
+mZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZ
+mZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZ
+mZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZ
+mZmZmZmZmZmZmf///wAAAP//AAD///8AAAD//wAA//8AAAD//wAA//8AAAD//wAA//8AAAD//wAA
+//8AAAD//wAA//8AAAD//wAA//8AAAD//wAA//8AAAD//wAA//8AAAD//wAA//8AAAD//wAA//8A
+AAD//wAA//8AAAD//wAA//8AAAD//wAA//8AAAD//wAA//8AAAD//wAA//8AAAD//wAA//8AAAD/
+//8AAAD//wAA//8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAElFTkSuQmCC
+"""
+
+# Função que transforma base64 em imagem
+def carregar_logo():
+    try:
+        img_bytes = base64.b64decode(LOGO_MSE_BASE64)
+        return Image.open(BytesIO(img_bytes))
+    except Exception as e:
+        st.error(f"Erro ao carregar a logo: {e}")
+        return None
 
 # =========================================================
 # CONFIGURAÇÕES
@@ -43,9 +77,6 @@ CIDADES_BR = {
     "bh": "Belo Horizonte - MG",
 }
 
-# =========================================================
-# FUNÇÕES BASE
-# =========================================================
 def ajustar_cidade(cidade):
     if not cidade:
         return ""
@@ -139,7 +170,7 @@ def cotar_rodoviario(origem, destino):
     )
 
 # =========================================================
-# GERAR TUDO
+# COTAÇÃO GERAL
 # =========================================================
 def cotar_geral(origem, destino, ida, volta, grupo):
     return (
@@ -197,47 +228,34 @@ threading.Thread(target=start_api, daemon=True).start()
 # =========================================================
 # INTERFACE STREAMLIT
 # =========================================================
-
 st.set_page_config(layout="wide")
 
-# ======= CSS corporativo =======
-st.markdown(
-    """
-    <style>
-        body { background-color: white; }
-        .titulo-mse {
-            font-size: 34px;
-            color: #7A0000;
-            font-weight: bold;
-        }
-        .botao-mse {
-            background-color: #7A0000 !important;
-            color: white !important;
-            padding: 12px 20px;
-            border-radius: 8px;
-            border: none;
-            cursor: pointer;
-            font-size: 18px;
-        }
-        .botao-mse:hover {
-            background-color: #b30000 !important;
-        }
-    </style>
-    """,
-    unsafe_allow_html=True
-)
+# CSS MSE
+st.markdown("""
+<style>
+body { background-color: white; }
+.titulo-mse {
+    font-size: 34px;
+    color: #7A0000;
+    font-weight: bold;
+}
+</style>
+""", unsafe_allow_html=True)
 
-# ======= LOGO — CAMINHO CORRETO =======
-st.image("/mnt/data/6cb82ecb-a668-400f-a9c2-55cdc31fdad5.png", width=120)
+# LOGO
+logo = carregar_logo()
+if logo:
+    st.image(logo, width=120)
+else:
+    st.error("Erro ao carregar a logo!")
 
 st.markdown("<div class='titulo-mse'>MSE TRAVEL EXPRESS</div>", unsafe_allow_html=True)
 st.write("---")
 
-# ======= BOTÕES DO TIPO =======
+# BOTÕES
 col1, col2, col3, col4 = st.columns(4)
 
 tipo = None
-
 with col1:
     if st.button("Rodoviário"):
         tipo = "rodoviario"
@@ -252,10 +270,10 @@ with col4:
         tipo = "geral"
 
 if not tipo:
-    st.info("Selecione um tipo de cotação acima.")
+    st.info("Selecione uma opção acima.")
     st.stop()
 
-# ======= CAMPOS =======
+# CAMPOS
 origem = st.text_input("Origem")
 destino = st.text_input("Destino (Cidade - UF)")
 
@@ -269,7 +287,7 @@ grupo = None
 if tipo in ["veiculo", "geral"]:
     grupo = st.radio("Grupo do Veículo", ["B", "EA"], horizontal=True)
 
-# ======= RESULTADO =======
+# CALCULAR
 if st.button("Calcular Cotação", type="primary"):
     if tipo == "rodoviario":
         st.success(cotar_rodoviario(origem, destino))
