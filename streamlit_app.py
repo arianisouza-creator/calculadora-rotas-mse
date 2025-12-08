@@ -256,29 +256,32 @@ if st.button("Calcular"):
     # OPÇÕES DE SOLICITAÇÃO – EXCLUSIVO COTAÇÃO GERAL
     # =========================================================
     if tipo == "geral":
-        st.write("---")
-        st.markdown("### 📝 Selecionar solicitação:")
+    st.write("---")
+    st.markdown("### 📝 Selecionar solicitação:")
 
-        opcao = st.selectbox(
-            "",
-            [
-                "-- Selecionar --",
-                "Passagem Rodoviária",
-                "Hospedagem",
-                "Veículo",
-                "Hospedagem + Veículo",
-            ],
-        )
+    opcao = st.selectbox(
+        "",
+        [
+            "-- Selecionar --",
+            "Passagem Rodoviária",
+            "Hospedagem",
+            "Veículo",
+            "Hospedagem + Veículo",
+        ],
+    )
 
-        if opcao == "Passagem Rodoviária":
-            st.link_button("Abrir Solicitação de Passagem",
-                           "https://portalmse.com.br/index.php")
+    if opcao == "Passagem Rodoviária":
+        abrir_link("https://portalmse.com.br/index.php",
+                   "Abrir Solicitação de Passagem Rodoviária")
 
-        elif opcao == "Hospedagem":
-            st.link_button("Abrir Solicitação de Hospedagem",
-                           "https://docs.google.com/forms/d/e/1FAIpQLSc7K3xq-fa_Hsw1yLel5pKILUVMM5kzhHbNRPDISGFke6aJ4A/viewform")
+    elif opcao == "Hospedagem":
+        abrir_link("https://docs.google.com/forms/d/e/1FAIpQLSc7K3xq-fa_Hsw1yLel5pKILUVMM5kzhHbNRPDISGFke6aJ4A/viewform",
+                   "Abrir Solicitação de Hospedagem")
 
-        elif opcao == "Veículo":
-            st.link_button("Abrir Solicitação de Veículo",
-                           "https://docs.google.com/forms/d/e/1FAIpQLSc-ImW1hPShhR0dUT2z77rRN0PJtPw93Pz6EBMkybPJW9r8eg/viewform")
+    elif opcao == "Veículo":
+        abrir_link("https://docs.google.com/forms/d/e/1FAIpQLSc-ImW1hPShhR0dUT2z77rRN0PJtPw93Pz6EBMkybPJW9r8eg/viewform",
+                   "Abrir Solicitação de Veículo")
+
+    
+
 
