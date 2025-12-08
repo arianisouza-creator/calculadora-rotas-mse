@@ -1,196 +1,261 @@
-import streamlit as st
-import requests
-from datetime import datetime
+// =======================================================
+// MSE TRAVEL EXPRESS — SISTEMA COMPLETO EM UM ARQUIVO
+// Node.js + Express + Puppeteer + Google Maps API
+// =======================================================
 
-# ============================
-# CONFIGURAÇÕES
-# ============================
-API_KEY = "AIzaSyA6B_wPkGZ0-jMoKxahLLpwhWFiyLdmxFk"
-PRECO_KM = 0.50
+import express from "express";
+import bodyParser from "body-parser";
+import axios from "axios";
+import puppeteer from "puppeteer";
+import path from "path";
+import { fileURLToPath } from "url";
 
-# ============================
-# TABELA HOSPEDAGEM POR UF
-# ============================
-TABELA_HOSPEDAGEM = {
-    "AC": 180, "AL": 200, "AP": 180, "AM": 220,
-    "BA": 220, "CE": 210, "DF": 260, "ES": 230,
-    "GO": 210, "MA": 200, "MT": 230, "MS": 230,
-    "MG": 250, "PA": 200, "PB": 200, "PR": 250,
-    "PE": 220, "PI": 190, "RJ": 280, "RN": 200,
-    "RS": 240, "RO": 200, "RR": 200, "SC": 200,
-    "SP": 300, "SE": 190, "TO": 190
+// ==========================
+// CONFIGURAÇÕES
+// ==========================
+const API_KEY = "SUA_API_KEY_GOOGLE";
+const PRECO_KM = 0.50;
+
+// ==========================
+// AJUSTES DE PATH
+// ==========================
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const app = express();
+app.use(bodyParser.json());
+app.use(express.static("public"));
+
+// ==========================
+// MAPA DE CIDADES
+// ==========================
+const CIDADES_BR = {
+  "londrina": "Londrina - PR",
+  "curitiba": "Curitiba - PR",
+  "maringa": "Maringá - PR",
+  "foz do iguacu": "Foz do Iguaçu - PR",
+  "sao paulo": "São Paulo - SP",
+  "campinas": "Campinas - SP",
+  "santos": "Santos - SP",
+  "teresina": "Teresina - PI",
+  "fortaleza": "Fortaleza - CE",
+  "recife": "Recife - PE",
+  "salvador": "Salvador - BA",
+  "aracaju": "Aracaju - SE",
+  "maceio": "Maceió - AL",
+  "joao pessoa": "João Pessoa - PB",
+  "natal": "Natal - RN",
+  "belem": "Belém - PA",
+  "macapa": "Macapá - AP",
+  "palmas": "Palmas - TO",
+  "porto alegre": "Porto Alegre - RS",
+  "florianopolis": "Florianópolis - SC",
+  "manaus": "Manaus - AM",
+  "rio branco": "Rio Branco - AC",
+  "boa vista": "Boa Vista - RR",
+  "brasilia": "Brasília - DF",
+  "goiania": "Goiânia - GO",
+  "cuiaba": "Cuiabá - MT",
+  "belo horizonte": "Belo Horizonte - MG",
+  "bh": "Belo Horizonte - MG"
+};
+
+// =====================================================
+// AJUSTAR CIDADE
+// =====================================================
+function ajustarCidade(cidade) {
+  if (!cidade) return "";
+  cidade = cidade.trim().toLowerCase();
+  if (CIDADES_BR[cidade]) return CIDADES_BR[cidade];
+  return cidade + ", Brasil";
 }
 
-# ============================
-# AJUSTAR CIDADE
-# ============================
-def ajustar_cidade(cidade):
-    if "-" in cidade:
-        return cidade
-    return cidade + ", Brasil"
+// =====================================================
+// GOOGLE MAPS — KM
+// =====================================================
+async function getKm(origem, destino) {
+  origem = ajustarCidade(origem);
+  destino = ajustarCidade(destino);
 
-# ============================
-# CALCULAR KM GOOGLE
-# ============================
-def get_km(origem, destino):
-    origem = ajustar_cidade(origem)
-    destino = ajustar_cidade(destino)
+  const url =
+    `https://maps.googleapis.com/maps/api/distancematrix/json?units=metric` +
+    `&origins=${encodeURIComponent(origem)}` +
+    `&destinations=${encodeURIComponent(destino)}` +
+    `&key=${API_KEY}`;
 
-    url = (
-        "https://maps.googleapis.com/maps/api/distancematrix/json"
-        f"?units=metric&origins={origem}&destinations={destino}&key={API_KEY}"
-    )
+  const res = await axios.get(url);
+  const el = res.data.rows?.[0]?.elements?.[0];
 
-    response = requests.get(url).json()
+  if (!el || el.status !== "OK") return 0;
 
-    try:
-        return response["rows"][0]["elements"][0]["distance"]["value"] / 1000
-    except:
-        return 0
-
-# ============================
-# CALCULAR DIAS
-# ============================
-def calcular_dias(ida, volta):
-    if not ida or not volta:
-        return 1
-    return (volta - ida).days
-
-def calcular_dias_hosp(ida, volta):
-    if not ida or not volta:
-        return 1
-    return (volta - ida).days + 1
-
-# ============================
-# STREAMLIT – APLICATIVO
-# ============================
-st.set_page_config(page_title="MSE Travel Express", layout="centered")
-
-# CSS TEMA MSE
-st.markdown("""
-<style>
-body {
-    background-color: #f4f4f4;
+  return el.distance.value / 1000;
 }
-.header {
-    background:#8B0000; 
-    padding:20px;
-    color:white;
-    text-align:center;
-    font-size:28px;
-    font-weight:bold;
-    border-radius:10px;
+
+// =====================================================
+// CÁLCULO DE DIAS
+// =====================================================
+function calcularDias(ida, volta) {
+  if (!ida || !volta) return 1;
+  return Math.ceil((new Date(volta) - new Date(ida)) / 86400000);
 }
-.button {
-    background:#8B0000; 
-    color:white; 
-    padding:12px; 
-    width:100%; 
-    border:none; 
-    border-radius:10px; 
-    font-size:20px;
+
+// =====================================================
+// VEÍCULOS
+// =====================================================
+const TABELA_DIARIA_VEICULO = {
+  "B": 151.92,
+  "EA": 203.44
+};
+
+async function cotarVeiculo(origem, destino, ida, volta, grupo) {
+  const km = await getKm(origem, destino);
+  const dias = calcularDias(ida, volta);
+  const diaria = TABELA_DIARIA_VEICULO[grupo];
+
+  const valorDiarias = diaria * dias;
+
+  const precoCombustivel = 5.80;
+  const consumo = (grupo === "B") ? 13 : 9;
+
+  const kmTotal = km * 2;
+  const litros = kmTotal / consumo;
+  const valorCombustivel = litros * precoCombustivel;
+
+  const total = valorDiarias + valorCombustivel;
+
+  return `
+      🚗 <b>Locação de Veículo</b><br><br>
+      Dias: <b>${dias}</b><br>
+      Diárias: <b>R$ ${valorDiarias.toFixed(2)}</b><br>
+      Combustível: <b>R$ ${valorCombustivel.toFixed(2)}</b><br><br>
+      <b>TOTAL: R$ ${total.toFixed(2)}</b>
+    `;
 }
-.box {
-    background:white;
-    padding:20px;
-    border-radius:10px;
-    box-shadow:0 0 10px #ccc;
+
+// =====================================================
+// HOSPEDAGEM
+// =====================================================
+const TABELA_HOSPEDAGEM = {
+  "AC": 200, "AL": 200, "AP": 300, "AM": 350,
+  "BA": 210, "CE": 350, "DF": 260, "ES": 300,
+  "GO": 230, "MA": 260, "MT": 260, "MS": 260,
+  "MG": 310, "PA": 300, "PB": 300, "PR": 250,
+  "PE": 170, "PI": 160, "RJ": 305, "RN": 250,
+  "RS": 280, "RO": 300, "RR": 300, "SC": 300,
+  "SP": 350, "SE": 190, "TO": 270
+};
+
+function extrairUF(destino) {
+  if (!destino.includes("-")) return null;
+  return destino.split("-")[1].trim().toUpperCase();
 }
-</style>
-""", unsafe_allow_html=True)
 
-# ============================
-# CABEÇALHO
-# ============================
-st.markdown('<div class="header">MSE TRAVEL EXPRESS</div>', unsafe_allow_html=True)
-st.write("")
-st.write("")
+function calcularDiasHosp(ida, volta) {
+  return calcularDias(ida, volta) + 1;
+}
 
-# ============================
-# BOTÕES PRINCIPAIS
-# ============================
-opcao = st.radio(
-    "Selecione o tipo de cotação:",
-    ["Passagem Rodoviária", "Hospedagem", "Veículo"],
-    index=0
-)
+async function cotarHospedagem(destino, ida, volta) {
+  const uf = extrairUF(destino);
 
-st.write("")
+  if (!uf || !TABELA_HOSPEDAGEM[uf]) {
+    return `
+      ❌ <b>Destino inválido</b><br>
+      Formato correto: Cidade - UF
+    `;
+  }
 
-# ============================
-# FORMULÁRIOS
-# ============================
-st.markdown('<div class="box">', unsafe_allow_html=True)
+  const diaria = TABELA_HOSPEDAGEM[uf];
+  const dias = calcularDiasHosp(ida, volta);
+  const total = diaria * dias;
 
-if opcao == "Passagem Rodoviária":
-    origem = st.text_input("Cidade de Origem")
-    destino = st.text_input("Cidade de Destino (Ex: Curitiba - PR)")
+  return `
+      🏨 <b>Hospedagem</b><br><br>
+      UF: <b>${uf}</b><br>
+      Dias: <b>${dias}</b><br>
+      Total: <b>R$ ${total.toFixed(2)}</b><br>
+    `;
+}
 
-    if st.button("COTAR", use_container_width=True):
-        km = get_km(origem, destino)
+// =====================================================
+// RODOVIÁRIO
+// =====================================================
+async function cotarRodoviario(origem, destino) {
+  const km = await getKm(origem, destino);
+  const total = km * PRECO_KM;
 
-        if km == 0:
-            st.error("Erro ao calcular a distância. Use o formato Cidade - UF.")
-        else:
-            total = km * PRECO_KM
-            st.info(f"""
-🚌 **Passagem Rodoviária**
+  return `
+      🚌 <b>Rodoviário</b><br><br>
+      KM: <b>${km.toFixed(1)}</b><br>
+      Total: <b>R$ ${total.toFixed(2)}</b>
+    `;
+}
 
-Origem: **{origem}**  
-Destino: **{destino}**
+// =====================================================
+// COTAÇÃO GERAL
+// =====================================================
+async function cotarPortal(tipo, origem, destino, ida, volta, grupo) {
+  if (tipo === "rodoviario") return await cotarRodoviario(origem, destino);
+  if (tipo === "hospedagem") return await cotarHospedagem(destino, ida, volta);
+  if (tipo === "veiculo") return await cotarVeiculo(origem, destino, ida, volta, grupo);
 
-Distância: **{km:.1f} km**  
-Total estimado: **R$ {total:.2f}**
-""")
+  const rod = await cotarRodoviario(origem, destino);
+  const hosp = await cotarHospedagem(destino, ida, volta);
+  const vei = await cotarVeiculo(origem, destino, ida, volta, grupo);
 
-# -------------------------------------
+  return `
+    <h2>📌 COTAÇÃO GERAL</h2><br>
+    ${rod}<br><hr>
+    ${hosp}<br><hr>
+    ${vei}
+  `;
+}
 
-elif opcao == "Hospedagem":
-    destino = st.text_input("Cidade de Destino (Ex: São Paulo - SP)")
-    data_ida = st.date_input("Data de Ida")
-    data_volta = st.date_input("Data de Volta")
+// =====================================================
+// PDF (Puppeteer)
+// =====================================================
+async function gerarPDF(html) {
+  const browser = await puppeteer.launch();
+  const page = await browser.newPage();
 
-    if st.button("COTAR", use_container_width=True):
-        try:
-            uf = destino.split("-")[1].strip().upper()
-            diaria = TABELA_HOSPEDAGEM[uf]
-            dias = calcular_dias_hosp(data_ida, data_volta)
-            total = diaria * dias
+  await page.setContent(`<html><body>${html}</body></html>`, {
+    waitUntil: "load"
+  });
 
-            st.info(f"""
-🏨 **Hospedagem**
+  const filePath = path.join(__dirname, "public/Cotacao_MSE.pdf");
 
-Cidade: **{destino}**  
-Estado (UF): **{uf}**
+  await page.pdf({
+    path: filePath,
+    format: "A4",
+    printBackground: true
+  });
 
-Dias de hospedagem: **{dias}**
+  await browser.close();
+  return "/Cotacao_MSE.pdf";
+}
 
-💰 **Total estimado: R$ {total:.2f}**
-""")
+// =====================================================
+// ROTAS HTTP
+// =====================================================
+app.get("/", (req, res) => {
+  res.send(`
+    <h1>MSE Travel Express</h1>
+    <p>API funcionando. Interface HTML deve estar em /public/index.html</p>
+  `);
+});
 
-        except:
-            st.error("Erro: Informe o destino no formato Cidade - UF.")
+app.post("/cotar", async (req, res) => {
+  const { tipo, origem, destino, ida, volta, grupo } = req.body;
+  res.json({ html: await cotarPortal(tipo, origem, destino, ida, volta, grupo) });
+});
 
-# -------------------------------------
+app.post("/pdf", async (req, res) => {
+  const { html } = req.body;
+  const url = await gerarPDF(html);
+  res.json({ url });
+});
 
-elif opcao == "Veículo":
-    origem = st.text_input("Cidade de Origem")
-    destino = st.text_input("Cidade de Destino")
-    grupo = st.selectbox("Grupo de veículo", ["B - Hatch Manual", "D - SUV Automático"])
-    data_ida = st.date_input("Data de Retirada")
-    data_volta = st.date_input("Data de Devolução")
-
-    if st.button("COTAR", use_container_width=True):
-        dias = calcular_dias(data_ida, data_volta)
-        preco_dia = 134 if grupo.startswith("B") else 203
-        total = preco_dia * dias
-
-        st.info(f"""
-🚗 **Veículo**
-
-Grupo: **{grupo}**  
-Dias: **{dias}**  
-Total estimado: **R$ {total:.2f}**
-""")
-
-st.markdown('</div>', unsafe_allow_html=True)
+// =====================================================
+// START SERVER
+// =====================================================
+const PORT = 3000;
+app.listen(PORT, () => console.log(`🚀 MSE Travel Express rodando na porta ${PORT}`));
