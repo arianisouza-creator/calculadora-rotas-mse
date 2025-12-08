@@ -11,56 +11,96 @@ from PIL import Image
 # 🔥 TEMA DARK CORPORATIVO MSE
 # =========================================================
 st.markdown("""
-    <style>
-        body, .stApp {
-            background-color: #121212 !important;
-            color: #E0E0E0 !important;
-        }
+<style>
 
-        h1, h2, h3, h4, h5, h6 {
-            color: #ffffff !important;
-        }
+    /* ======================== */
+    /*   GLOBAL DARK THEME      */
+    /* ======================== */
 
-        .stMarkdown, .stTextInput, .stSelectbox, .stDateInput {
-            color: #E0E0E0 !important;
-        }
+    body, .stApp {
+        background-color: #0d0d0d !important;
+        color: #e6e6e6 !important;
+    }
 
-        input, select, textarea {
-            background-color: #1E1E1E !important;
-            color: #E0E0E0 !important;
-            border: 1px solid #444 !important;
-        }
+    /* TÍTULO NEON */
+    h1 {
+        font-size: 42px !important;
+        text-align: center !important;
+        color: #ff4d4d !important;
+        text-shadow: 0 0 12px #ff1a1a, 0 0 24px #b30000;
+        font-weight: 800 !important;
+    }
 
-        .stButton>button {
-            background-color: #7A0000 !important;
-            color: white !important;
-            border: 1px solid #9c0000 !important;
-            padding: 10px 18px;
-            border-radius: 8px;
-            font-size: 16px;
-        }
+    /* TEXTOS */
+    h2, h3, h4, h5, h6, p, label {
+        color: #e6e6e6 !important;
+        font-weight: 500 !important;
+    }
 
-        .stButton>button:hover {
-            background-color: #a80000 !important;
-            border-color: #ff4d4d !important;
-            transform: scale(1.02);
-        }
+    /* ======================== */
+    /*        INPUTS            */
+    /* ======================== */
+    input, select, textarea {
+        background: rgba(255,255,255,0.05) !important;
+        color: #ffffff !important;
+        border-radius: 10px !important;
+        padding: 10px !important;
+        border: 1px solid #333 !important;
+        transition: 0.3s ease-in-out;
+        backdrop-filter: blur(4px);
+    }
 
-        .stSelectbox>div>div {
-            background-color: #1E1E1E !important;
-            color: white !important;
-        }
+    input:focus, select:focus {
+        border-color: #ff4d4d !important;
+        box-shadow: 0 0 10px #ff3333 !important;
+    }
 
-        hr {
-            border-color: #333 !important;
-        }
+    /* ======================== */
+    /*        SELECTBOX         */
+    /* ======================== */
+    .stSelectbox div {
+        background-color: #1a1a1a !important;
+        color: white !important;
+    }
 
-        .stAlert {
-            background-color: #1E1E1E !important;
-            color: white !important;
-            border-left: 5px solid #7A0000 !important;
-        }
-    </style>
+    /* ======================== */
+    /*         BUTTONS          */
+    /* ======================== */
+    .stButton>button {
+        background: linear-gradient(90deg, #7A0000, #cc0000) !important;
+        color: white !important;
+        border: none !important;
+        padding: 12px 18px !important;
+        border-radius: 10px !important;
+        font-size: 18px !important;
+        transition: 0.3s ease-in-out !important;
+        box-shadow: 0 0 10px rgba(255, 0, 0, 0.4);
+    }
+
+    .stButton>button:hover {
+        background: linear-gradient(90deg, #cc0000, #ff1a1a) !important;
+        transform: scale(1.05) !important;
+        box-shadow: 0 0 18px rgba(255, 0, 0, 0.8);
+    }
+
+    /* ======================== */
+    /*       RESULT CARDS       */
+    /* ======================== */
+    .stMarkdown, .stAlert, .result-card {
+        background: rgba(255,255,255,0.06) !important;
+        color: white !important;
+        padding: 18px !important;
+        border-radius: 12px !important;
+        border-left: 4px solid #ff3333 !important;
+        box-shadow: 0 0 12px rgba(255, 0, 0, 0.15);
+        margin-top: 15px !important;
+    }
+
+    hr {
+        border: 1px solid #333 !important;
+    }
+
+</style>
 """, unsafe_allow_html=True)
 
 # =========================================================
@@ -332,3 +372,4 @@ if opcao != "-- Selecionar --":
         elif opcao == "Hospedagem":
             st.markdown("[Abrir Solicitação de Hospedagem](https://docs.google.com/forms/d/e/1FAIpQLSc7K3xq-fa_Hsw1yLel5pKILUVMM5kzhHbNRPDISGFke6aJ4A/viewform)")
      
+
