@@ -68,7 +68,8 @@ def get_km(origem, destino):
 def calcular_dias(ida, volta):
     if not ida or not volta:
         return 1
-    return (volta - ida).days or 1
+    dias = (volta - ida).days
+    return dias if dias > 0 else 1
 
 # =========================================================
 # VEÍCULO
@@ -194,21 +195,21 @@ def start_api():
 threading.Thread(target=start_api, daemon=True).start()
 
 # =========================================================
-# INTERFACE STREAMLIT - CORPORATIVA
+# INTERFACE STREAMLIT
 # =========================================================
 st.set_page_config(layout="wide")
 
-# LOADING LOGO
+# Logo da MSE carregada da raiz
 try:
-    st.image("assets/logo_mse.png", width=120)
+    st.image("LOGO MSE.png", width=120)
 except:
-    st.error("Erro ao carregar a logo (verifique assets/logo_mse.png).")
+    st.error("Erro: Não foi possível carregar LOGO MSE.png (ela deve estar na raiz do repositório).")
 
-# TÍTULO
+# Título
 st.markdown("<h1 style='color:#7A0000;'>MSE TRAVEL EXPRESS</h1>", unsafe_allow_html=True)
 st.write("---")
 
-# BOTÕES DO MENU
+# Botões principais
 col1, col2, col3, col4 = st.columns(4)
 
 tipo = None
@@ -229,7 +230,7 @@ if not tipo:
     st.info("Selecione uma opção acima.")
     st.stop()
 
-# CAMPOS DO FORMULÁRIO
+# Campos do formulário
 origem = st.text_input("Origem")
 destino = st.text_input("Destino (Cidade - UF)")
 
@@ -243,7 +244,7 @@ grupo = None
 if tipo in ["veiculo", "geral"]:
     grupo = st.radio("Grupo do veículo", ["B", "EA"], horizontal=True)
 
-# BOTÃO DE CÁLCULO
+# Resultado
 if st.button("Calcular", type="primary"):
     if tipo == "rodoviario":
         st.success(cotar_rodoviario(origem, destino))
