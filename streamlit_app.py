@@ -1,23 +1,17 @@
 import streamlit as st
+import threading
+from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
+import uvicorn
 import requests
-from datetime import date, datetime
-from io import BytesIO
-from PIL import Image
+import json
+from datetime import datetime, date
 
-# ==========================================
+# =========================================================
 # CONFIGURAÇÕES
-# ==========================================
+# =========================================================
 API_KEY = "AIzaSyA6B_wPkGZ0-jMoKxahLLpwhWFiyLdmxFk"
 PRECO_KM = 0.50
-
-# LOGO NO MESMO DIRETÓRIO
-LOGO_PATH = "LOGO MSE.png"
-
-def carregar_logo():
-    try:
-        return Image.open(LOGO_PATH)
-    except:
-        return None
 
 CIDADES_BR = {
     "londrina": "Londrina - PR",
@@ -50,10 +44,9 @@ CIDADES_BR = {
     "bh": "Belo Horizonte - MG",
 }
 
-
-# ==========================================
+# =========================================================
 # FUNÇÕES BASE
-# ==========================================
+# =========================================================
 def ajustar_cidade(cidade):
     if not cidade:
         return ""
@@ -73,9 +66,7 @@ def get_km(origem, destino):
     try:
         res = requests.get(url).json()
         elem = res["rows"][0]["elements"][0]
-        if elem["status"] != "OK":
-            return 0
-        return elem["distance"]["value"] / 1000
+        return elem["distance"]["value"] / 1000 if elem["status"] == "OK" else 0
     except:
         return 0
 
@@ -83,27 +74,41 @@ def get_km(origem, destino):
 def calcular_dias(ida, volta):
     if not ida or not volta:
         return 1
-    dias = (volta - ida).days
-    return dias if dias > 0 else 1
+    return (volta - ida).days or 1
 
 
-# ==========================================
-# RODOVIÁRIO
-# ==========================================
-def cotar_rodoviario(origem, destino):
+# =========================================================
+# VEÍCULO
+# =========================================================
+TABELA_DIARIA = {"B": 151.92, "EA": 203.44}
+
+def cotar_veiculo(origem, destino, ida, volta, grupo):
     km = get_km(origem, destino)
-    total = km * PRECO_KM
+    dias = calcular_dias(ida, volta)
 
-    return f"""
-### 🚌 Passagem Rodoviária
-**Distância:** {km:.1f} km  
-**Total:** R$ {total:.2f}
-"""
+    diaria = TABELA_DIARIA.get(grupo, 0)
+    valor_diarias = diaria * dias
+
+    consumo = 13 if grupo == "B" else 9
+    preco_comb = 5.80
+
+    litros = (km * 2) / consumo
+    valor_comb = litros * preco_comb
+
+    total = valor_diarias + valor_comb
+
+    return (
+        f"🚗 Veículo\n\n"
+        f"Dias: {dias}\n"
+        f"Diárias: R$ {valor_diarias:.2f}\n"
+        f"Combustível: R$ {valor_comb:.2f}\n\n"
+        f"TOTAL: R$ {total:.2f}"
+    )
 
 
-# ==========================================
+# =========================================================
 # HOSPEDAGEM
-# ==========================================
+# =========================================================
 TABELA_HOSPEDAGEM = {
     "AC": 200, "AL": 200, "AP": 300, "AM": 350,
     "BA": 210, "CE": 350, "DF": 260, "ES": 300,
@@ -114,141 +119,120 @@ TABELA_HOSPEDAGEM = {
     "SP": 350, "SE": 190, "TO": 270
 }
 
-def extrair_uf(destino):
-    if "-" not in destino:
+def extrair_uf(dest):
+    if "-" not in dest:
         return None
-    return destino.split("-")[1].strip().upper()
+    return dest.split("-")[1].strip().upper()
 
 
-def cotar_hospedagem(destino, ida, volta):
-    uf = extrair_uf(destino)
-    if uf not in TABELA_HOSPEDAGEM:
-        return "**Destino inválido. Use o formato Cidade - UF**"
+def cotar_hospedagem(dest, ida, volta):
+    uf = extrair_uf(dest)
+    if not uf or uf not in TABELA_HOSPEDAGEM:
+        return "Destino inválido."
 
-    diaria = TABELA_HOSPEDAGEM[uf]
     dias = calcular_dias(ida, volta) + 1
-    total = dias * diaria
+    valor = dias * TABELA_HOSPEDAGEM[uf]
 
-    return f"""
-### 🏨 Hospedagem
-**UF:** {uf}  
-**Diárias:** {dias}  
-**Total:** R$ {total:.2f}
-"""
+    return f"🏨 Hospedagem\n\nUF: {uf}\nDias: {dias}\nTOTAL: R$ {valor:.2f}"
 
 
-# ==========================================
-# VEÍCULO
-# ==========================================
-TABELA_DIARIA = {
-    "B": 151.92,
-    "EA": 203.44,
-}
-
-def cotar_veiculo(origem, destino, ida, volta, grupo):
+# =========================================================
+# RODOVIÁRIO
+# =========================================================
+def cotar_rodoviario(origem, destino):
     km = get_km(origem, destino)
-    dias = calcular_dias(ida, volta)
-
-    diaria = TABELA_DIARIA[grupo]
-    valor_diarias = dias * diaria
-
-    consumo = 13 if grupo == "B" else 9
-    preco_comb = 5.80
-    litros = (km * 2) / consumo
-    valor_comb = litros * preco_comb
-
-    total = valor_comb + valor_diarias
-
-    return f"""
-### 🚗 Locação de Veículo
-**Dias:** {dias}  
-**Diárias:** R$ {valor_diarias:.2f}  
-**Combustível:** R$ {valor_comb:.2f}  
-
-### 💰 TOTAL: R$ {total:.2f}
-"""
+    valor = km * PRECO_KM
+    return f"🚌 Rodoviário\n\nDistância: {km:.1f} km\nTOTAL: R$ {valor:.2f}"
 
 
-# ==========================================
+# =========================================================
 # COTAÇÃO GERAL
-# ==========================================
+# =========================================================
 def cotar_geral(origem, destino, ida, volta, grupo):
     return (
         cotar_rodoviario(origem, destino)
-        + "\n---\n"
+        + "\n\n"
         + cotar_hospedagem(destino, ida, volta)
-        + "\n---\n"
+        + "\n\n"
         + cotar_veiculo(origem, destino, ida, volta, grupo)
     )
 
 
-# ==========================================
-# INTERFACE STREAMLIT
-# ==========================================
-st.set_page_config(layout="wide")
+# =========================================================
+# FASTAPI BACKEND
+# =========================================================
+app = FastAPI()
 
-# LOGO
-logo = carregar_logo()
-if logo:
-    st.image(logo, width=160)
-else:
-    st.error("Não foi possível carregar a LOGO MSE.png")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-st.markdown("<h1 style='text-align:center; color:#7A0000;'>MSE TRAVEL EXPRESS</h1>", unsafe_allow_html=True)
-st.write("---")
 
-# BOTÕES DE NAVEGAÇÃO
-cols = st.columns(4)
-with cols[0]: rod = st.button("🚌 Passagem Rodoviária")
-with cols[1]: hos = st.button("🏨 Hospedagem")
-with cols[2]: vei = st.button("🚗 Veículo")
-with cols[3]: ger = st.button("🧾 Cotação Geral")
+@app.post("/api")
+async def api_calc(request: Request):
+    data = await request.json()
 
-tipo = None
-if rod: tipo = "rodoviario"
-if hos: tipo = "hospedagem"
-if vei: tipo = "veiculo"
-if ger: tipo = "geral"
+    tipo = data.get("tipo")
+    origem = data.get("origem", "")
+    destino = data.get("destino", "")
+    ida = data.get("ida")
+    volta = data.get("volta")
+    grupo = data.get("grupo")
 
-if not tipo:
-    st.info("Selecione uma opção acima.")
-    st.stop()
-
-# FORMULÁRIO
-with st.form("form_main", clear_on_submit=False):
-
-    st.subheader(tipo.upper())
-
-    origem = st.text_input("Origem")
-    destino = st.text_input("Destino (Cidade - UF)")
-
-    ida = volta = None
-
-    if tipo != "rodoviario":
-        ida = st.date_input("Data de Ida", date.today())
-        volta = st.date_input("Data de Volta", date.today())
-
-    grupo = None
-    if tipo in ["veiculo", "geral"]:
-        grupo_label = st.selectbox(
-            "Grupo do Veículo",
-            ["B - Manual (151,92)", "EA - Automático (203,44)"]
-        )
-        grupo = "B" if grupo_label.startswith("B") else "EA"
-
-    submit = st.form_submit_button("COTAR")
-
-# RESULTADO
-if submit:
+    ida = datetime.strptime(ida, "%Y-%m-%d").date() if ida else None
+    volta = datetime.strptime(volta, "%Y-%m-%d").date() if volta else None
 
     if tipo == "rodoviario":
-        st.markdown(cotar_rodoviario(origem, destino))
-
+        resultado = cotar_rodoviario(origem, destino)
     elif tipo == "hospedagem":
-        st.markdown(cotar_hospedagem(destino, ida, volta))
-
+        resultado = cotar_hospedagem(destino, ida, volta)
     elif tipo == "veiculo":
-        st.markdown(cotar_veiculo(origem, destino, ida, volta, grupo))
-
+        resultado = cotar_veiculo(origem, destino, ida, volta, grupo)
     elif tipo == "geral":
-        st.markdown(cotar_geral(origem, destino, ida, volta, grupo))
+        resultado = cotar_geral(origem, destino, ida, volta, grupo)
+    else:
+        resultado = "Tipo inválido."
+
+    return {"resultado": resultado}
+
+
+def start_api():
+    uvicorn.run(app, host="0.0.0.0", port=8000)
+
+threading.Thread(target=start_api, daemon=True).start()
+
+
+# =========================================================
+# STREAMLIT INTERFACE + LOGO MSE
+# =========================================================
+
+# EXIBE A LOGO ANTES DO TÍTULO
+try:
+    st.image("LOGO MSE.png", width=180)
+except:
+    st.error("⚠️ Não foi possível carregar a logo LOGO MSE.png")
+
+st.title("MSE TRAVEL EXPRESS")
+
+tipo = st.selectbox("Tipo", ["rodoviario", "hospedagem", "veiculo", "geral"])
+origem = st.text_input("Origem")
+destino = st.text_input("Destino (Cidade - UF)")
+ida = st.date_input("Ida", date.today())
+volta = st.date_input("Volta", date.today())
+
+grupo = None
+if tipo in ["veiculo", "geral"]:
+    grupo = st.selectbox("Grupo", ["B", "EA"])
+
+if st.button("Calcular"):
+    if tipo == "rodoviario":
+        st.text(cotar_rodoviario(origem, destino))
+    elif tipo == "hospedagem":
+        st.text(cotar_hospedagem(destino, ida, volta))
+    elif tipo == "veiculo":
+        st.text(cotar_veiculo(origem, destino, ida, volta, grupo))
+    else:
+        st.text(cotar_geral(origem, destino, ida, volta, grupo))
