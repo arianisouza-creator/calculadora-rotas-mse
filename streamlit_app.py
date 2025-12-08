@@ -6,9 +6,107 @@ import uvicorn
 import requests
 from datetime import datetime, date
 
-# =========================================================
-# CONFIGURAÇÕES
-# =========================================================
+
+# ===============================================================
+# HOOK DE ESTILO MSE (LAYOUT COMPLETO)
+# ===============================================================
+st.markdown("""
+<style>
+
+body {
+    background-color: #f2f2f2 !important;
+}
+
+/* Cabeçalho fixo */
+.header {
+    background-color: #7A0000;
+    padding: 22px;
+    text-align: center;
+    color: white;
+    font-size: 30px;
+    font-weight: bold;
+    width: 100%;
+}
+
+/* Card central */
+.main-card {
+    max-width: 900px;
+    margin: 30px auto;
+    background: white;
+    padding: 35px;
+    border-radius: 15px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.12);
+}
+
+/* Botões grandes */
+.big-button {
+    background-color: #7A0000;
+    color: white !important;
+    padding: 18px;
+    font-size: 20px;
+    font-weight: 600;
+    border-radius: 10px;
+    width: 100%;
+    border: none;
+    margin-bottom: 12px;
+}
+
+.big-button:hover {
+    background-color: #5a0000;
+}
+
+/* Título das seções */
+.section-title {
+    font-size: 26px;
+    font-weight: bold;
+    margin-top: 20px;
+    color: #7A0000;
+}
+
+/* Resultados estilizados */
+.result-card {
+    background-color: #fafafa;
+    padding: 20px;
+    border-radius: 12px;
+    border: 1px solid #e4e4e4;
+    margin-top: 18px;
+    font-size: 18px;
+}
+
+/* Botão PDF */
+.pdf-button {
+    background-color: #7A0000;
+    color: white;
+    padding: 14px;
+    border-radius: 10px;
+    text-align: center;
+    font-weight: bold;
+    width: 100%;
+    cursor: pointer;
+}
+
+.pdf-button:hover {
+    background-color: #5a0000;
+}
+</style>
+""", unsafe_allow_html=True)
+
+
+# ===============================================================
+# CABEÇALHO + LOGO
+# ===============================================================
+st.markdown("<div class='header'>MSE TRAVEL EXPRESS</div>", unsafe_allow_html=True)
+
+# Exibir logo MSE
+try:
+    st.image("LOGO MSE.png", width=140)
+except:
+    st.error("⚠ Não foi possível carregar LOGO MSE.png — coloque o arquivo na raiz do projeto.")
+
+
+# ===============================================================
+# CONFIGURAÇÕES DO BACKEND
+# ===============================================================
 API_KEY = "AIzaSyA6B_wPkGZ0-jMoKxahLLpwhWFiyLdmxFk"
 PRECO_KM = 0.50
 
@@ -43,11 +141,13 @@ CIDADES_BR = {
     "bh": "Belo Horizonte - MG",
 }
 
+
 def ajustar_cidade(cidade):
     if not cidade:
         return ""
     cidade = cidade.lower().strip()
     return CIDADES_BR.get(cidade, cidade + ", Brasil")
+
 
 def get_km(origem, destino):
     origem = ajustar_cidade(origem)
@@ -65,15 +165,17 @@ def get_km(origem, destino):
     except:
         return 0
 
+
 def calcular_dias(ida, volta):
     if not ida or not volta:
         return 1
     dias = (volta - ida).days
     return dias if dias > 0 else 1
 
-# =========================================================
-# VEÍCULO
-# =========================================================
+
+# ===============================================================
+# FUNÇÕES DE COTAÇÃO
+# ===============================================================
 TABELA_DIARIA = {"B": 151.92, "EA": 203.44}
 
 def cotar_veiculo(origem, destino, ida, volta, grupo):
@@ -84,23 +186,23 @@ def cotar_veiculo(origem, destino, ida, volta, grupo):
 
     consumo = 13 if grupo == "B" else 9
     preco_comb = 5.80
-
     litros = (km * 2) / consumo
     valor_comb = litros * preco_comb
 
     total = valor_diarias + valor_comb
 
-    return (
-        f"🚗 VEÍCULO\n\n"
-        f"Dias: {dias}\n"
-        f"Diárias: R$ {valor_diarias:.2f}\n"
-        f"Combustível: R$ {valor_comb:.2f}\n\n"
-        f"TOTAL: R$ {total:.2f}"
-    )
+    return f"""
+🚗 **Locação de Veículo**
 
-# =========================================================
-# HOSPEDAGEM
-# =========================================================
+Dias de uso: **{dias} dia(s)**  
+
+Valor das diárias: **R$ {valor_diarias:.2f}**  
+Valor do combustível: **R$ {valor_comb:.2f}**
+
+💰 **VALOR TOTAL: R$ {total:.2f}**
+"""
+
+
 TABELA_HOSPEDAGEM = {
     "AC": 200, "AL": 200, "AP": 300, "AM": 350,
     "BA": 210, "CE": 350, "DF": 260, "ES": 300,
@@ -116,6 +218,7 @@ def extrair_uf(dest):
         return None
     return dest.split("-")[1].strip().upper()
 
+
 def cotar_hospedagem(dest, ida, volta):
     uf = extrair_uf(dest)
     if not uf or uf not in TABELA_HOSPEDAGEM:
@@ -124,23 +227,28 @@ def cotar_hospedagem(dest, ida, volta):
     dias = calcular_dias(ida, volta) + 1
     valor = dias * TABELA_HOSPEDAGEM[uf]
 
-    return (
-        f"🏨 HOSPEDAGEM\n\nUF: {uf}\nDias: {dias}\nTOTAL: R$ {valor:.2f}"
-    )
+    return f"""
+🏨 **Hospedagem**
 
-# =========================================================
-# RODOVIÁRIO
-# =========================================================
+UF: **{uf}**  
+Diárias: **{dias}**
+
+Total: **R$ {valor:.2f}**
+"""
+
+
 def cotar_rodoviario(origem, destino):
     km = get_km(origem, destino)
     valor = km * PRECO_KM
-    return (
-        f"🚌 RODOVIÁRIO\n\nDistância: {km:.1f} km\nTOTAL: R$ {valor:.2f}"
-    )
 
-# =========================================================
-# COTAÇÃO GERAL
-# =========================================================
+    return f"""
+🚌 **Passagem Rodoviária**
+
+Distância: **{km:.1f} km**  
+Total: **R$ {valor:.2f}**
+"""
+
+
 def cotar_geral(origem, destino, ida, volta, grupo):
     return (
         cotar_rodoviario(origem, destino)
@@ -150,9 +258,10 @@ def cotar_geral(origem, destino, ida, volta, grupo):
         + cotar_veiculo(origem, destino, ida, volta, grupo)
     )
 
-# =========================================================
-# FASTAPI BACKEND
-# =========================================================
+
+# ===============================================================
+# FASTAPI SERVER
+# ===============================================================
 app = FastAPI()
 
 app.add_middleware(
@@ -189,48 +298,44 @@ async def api_calc(request: Request):
 
     return {"resultado": resultado}
 
+
 def start_api():
     uvicorn.run(app, host="0.0.0.0", port=8000)
 
 threading.Thread(target=start_api, daemon=True).start()
 
-# =========================================================
-# INTERFACE STREAMLIT
-# =========================================================
-st.set_page_config(layout="wide")
 
-# Logo da MSE carregada da raiz
-try:
-    st.image("LOGO MSE.png", width=120)
-except:
-    st.error("Erro: Não foi possível carregar LOGO MSE.png (ela deve estar na raiz do repositório).")
+# ===============================================================
+# INTERFACE PRINCIPAL
+# ===============================================================
+st.markdown("<div class='main-card'>", unsafe_allow_html=True)
 
-# Título
-st.markdown("<h1 style='color:#7A0000;'>MSE TRAVEL EXPRESS</h1>", unsafe_allow_html=True)
-st.write("---")
-
-# Botões principais
-col1, col2, col3, col4 = st.columns(4)
-
+# BOTÕES DO MENU
 tipo = None
-with col1:
-    if st.button("Rodoviário"):
-        tipo = "rodoviario"
-with col2:
-    if st.button("Hospedagem"):
-        tipo = "hospedagem"
-with col3:
-    if st.button("Veículo"):
-        tipo = "veiculo"
-with col4:
-    if st.button("Geral"):
-        tipo = "geral"
+
+if st.button("🚌 Passagem Rodoviária", key="rod", use_container_width=True):
+    tipo = "rodoviario"
+
+if st.button("🏨 Hospedagem", key="hosp", use_container_width=True):
+    tipo = "hospedagem"
+
+if st.button("🚗 Veículo", key="veic", use_container_width=True):
+    tipo = "veiculo"
+
+if st.button("📋 Cotação Geral", key="geral", use_container_width=True):
+    tipo = "geral"
+
 
 if not tipo:
-    st.info("Selecione uma opção acima.")
+    st.markdown("</div>", unsafe_allow_html=True)
     st.stop()
 
-# Campos do formulário
+
+# ===============================================================
+# FORM DE CADA TIPO
+# ===============================================================
+st.markdown(f"<div class='section-title'>{tipo.upper()}</div>", unsafe_allow_html=True)
+
 origem = st.text_input("Origem")
 destino = st.text_input("Destino (Cidade - UF)")
 
@@ -238,22 +343,34 @@ if tipo != "rodoviario":
     ida = st.date_input("Data de ida", date.today())
     volta = st.date_input("Data de volta", date.today())
 else:
-    ida, volta = None, None
+    ida = None
+    volta = None
 
 grupo = None
 if tipo in ["veiculo", "geral"]:
-    grupo = st.radio("Grupo do veículo", ["B", "EA"], horizontal=True)
+    grupo = st.selectbox(
+        "Grupo do Veículo:",
+        [
+            "B - Hatch Manual (R$ 151,92)",
+            "EA - Automático (R$ 203,44)"
+        ]
+    )
+    grupo = "B" if grupo.startswith("B") else "EA"
 
-# Resultado
-if st.button("Calcular", type="primary"):
+
+if st.button("COTAR", use_container_width=True):
+    st.markdown("<div class='result-card'>", unsafe_allow_html=True)
+
     if tipo == "rodoviario":
-        st.success(cotar_rodoviario(origem, destino))
-
+        st.markdown(cotar_rodoviario(origem, destino))
     elif tipo == "hospedagem":
-        st.success(cotar_hospedagem(destino, ida, volta))
-
+        st.markdown(cotar_hospedagem(destino, ida, volta))
     elif tipo == "veiculo":
-        st.success(cotar_veiculo(origem, destino, ida, volta, grupo))
-
+        st.markdown(cotar_veiculo(origem, destino, ida, volta, grupo))
     elif tipo == "geral":
-        st.success(cotar_geral(origem, destino, ida, volta, grupo))
+        st.markdown(cotar_geral(origem, destino, ida, volta, grupo))
+
+    st.markdown("</div>", unsafe_allow_html=True)
+
+
+st.markdown("</div>", unsafe_allow_html=True)
