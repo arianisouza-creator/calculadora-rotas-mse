@@ -6,7 +6,6 @@ import uvicorn
 import requests
 from datetime import datetime, date
 
-
 # =========================================================
 # CONFIGURAÇÕES
 # =========================================================
@@ -43,7 +42,6 @@ CIDADES_BR = {
     "belo horizonte": "Belo Horizonte - MG",
     "bh": "Belo Horizonte - MG",
 }
-
 
 # =========================================================
 # FUNÇÕES BASE
@@ -99,10 +97,10 @@ def cotar_veiculo(origem, destino, ida, volta, grupo):
     total = valor_diarias + valor_comb
 
     return (
-        f"🚗 **Veículo**\n\n"
-        f"**Dias:** {dias}\n"
-        f"**Diárias:** R$ {valor_diarias:.2f}\n"
-        f"**Combustível:** R$ {valor_comb:.2f}\n\n"
+        f"🚗 **Locação de Veículo**\n\n"
+        f"**Dias de uso:** {dias}\n"
+        f"**Valor das diárias:** R$ {valor_diarias:.2f}\n"
+        f"**Valor do combustível:** R$ {valor_comb:.2f}\n\n"
         f"💰 **TOTAL: R$ {total:.2f}**"
     )
 
@@ -129,16 +127,16 @@ def extrair_uf(dest):
 def cotar_hospedagem(dest, ida, volta):
     uf = extrair_uf(dest)
     if not uf or uf not in TABELA_HOSPEDAGEM:
-        return "❌ Destino inválido. Use formato: Cidade - UF"
+        return "❌ Destino inválido. Use o formato Cidade - UF."
 
     dias = calcular_dias(ida, volta) + 1
     valor = dias * TABELA_HOSPEDAGEM[uf]
 
     return (
         f"🏨 **Hospedagem**\n\n"
-        f"UF: **{uf}**\n"
-        f"Diárias: **{dias}**\n"
-        f"TOTAL: **R$ {valor:.2f}**"
+        f"**UF:** {uf}\n"
+        f"**Diárias:** {dias}\n\n"
+        f"💰 **TOTAL: R$ {valor:.2f}**"
     )
 
 
@@ -148,10 +146,11 @@ def cotar_hospedagem(dest, ida, volta):
 def cotar_rodoviario(origem, destino):
     km = get_km(origem, destino)
     valor = km * PRECO_KM
+
     return (
-        f"🚌 **Rodoviário**\n\n"
-        f"Distância: **{km:.1f} km**\n"
-        f"TOTAL: **R$ {valor:.2f}**"
+        f"🚌 **Passagem Rodoviária**\n\n"
+        f"**Distância:** {km:.1f} km\n"
+        f"💰 **TOTAL: R$ {valor:.2f}**"
     )
 
 
@@ -210,74 +209,55 @@ async def api_calc(request: Request):
 
 
 # =========================================================
-# THREAD PARA RODAR O SERVIDOR
+# THREAD DO SERVIDOR FASTAPI
 # =========================================================
 def start_api():
     uvicorn.run(app, host="0.0.0.0", port=8000)
-
 
 threading.Thread(target=start_api, daemon=True).start()
 
 
 # =========================================================
-# STREAMLIT UI (BONITO)
+# INTERFACE STREAMLIT (FRONT-END)
 # =========================================================
 
-st.set_page_config(page_title="MSE Travel Express", page_icon="✈️", layout="centered")
+st.set_page_config(page_title="MSE Travel Express", layout="centered")
 
-# LOGO
-try:
-    st.image("LOGO MSE.png", width=180)
-except:
-    st.error("Não foi possível carregar a LOGO MSE.png.")
-
+st.image("LOGO MSE.png", width=180)
 st.markdown("<h1 style='text-align:center; color:#7A0000;'>MSE TRAVEL EXPRESS</h1>", unsafe_allow_html=True)
 
-
-# =========================
-# SELEÇÃO DE TIPO
-# =========================
-st.markdown("### 📌 Escolha o tipo de cotação")
+st.write("---")
 
 tipo = st.selectbox(
-    "",
-    ["rodoviario", "hospedagem", "veiculo", "geral"],
-    format_func=lambda x: {
-        "rodoviario": "🚌 Passagem Rodoviária",
-        "hospedagem": "🏨 Hospedagem",
-        "veiculo": "🚗 Veículo",
-        "geral": "📋 Cotação Geral"
-    }[x]
+    "Selecione o tipo de cotação:",
+    ["rodoviario", "hospedagem", "veiculo", "geral"]
 )
 
-with st.container():
-    st.markdown("### ✏️ Preencha os dados")
+origem = st.text_input("Origem")
+destino = st.text_input("Destino (Cidade - UF)")
+ida = st.date_input("Data de Ida", date.today())
+volta = st.date_input("Data de Volta", date.today())
 
-    if tipo != "hospedagem":
-        origem = st.text_input("Origem:")
+grupo = None
+if tipo in ["veiculo", "geral"]:
+    grupo = st.selectbox("Grupo do Veículo", ["B", "EA"])
 
-    destino = st.text_input("Destino (Cidade - UF):")
-
-    if tipo != "rodoviario":
-        ida = st.date_input("Data de Ida:", date.today())
-        volta = st.date_input("Data de Volta:", date.today())
+if st.button("Calcular"):
+    if tipo == "rodoviario":
+        st.markdown(cotar_rodoviario(origem, destino))
+    elif tipo == "hospedagem":
+        st.markdown(cotar_hospedagem(destino, ida, volta))
+    elif tipo == "veiculo":
+        st.markdown(cotar_veiculo(origem, destino, ida, volta, grupo))
     else:
-        ida = volta = None
-
-    grupo = None
-    if tipo in ["veiculo", "geral"]:
-        grupo = st.selectbox(
-            "Grupo do Veículo:",
-            ["B", "EA"],
-            format_func=lambda x: "Grupo B - Hatch Manual" if x == "B" else "Grupo EA - Automático"
-        )
-
+        st.markdown(cotar_geral(origem, destino, ida, volta, grupo))
 
     # =========================================================
-    # OPÇÕES DE SOLICITAÇÃO (APENAS PARA COTAÇÃO GERAL)
+    # OPÇÕES DE SOLICITAÇÃO – EXCLUSIVO COTAÇÃO GERAL
     # =========================================================
     if tipo == "geral":
-        st.markdown("### 📝 Selecione o que deseja solicitar:")
+        st.write("---")
+        st.markdown("### 📝 Selecionar solicitação:")
 
         opcao = st.selectbox(
             "",
@@ -290,32 +270,15 @@ with st.container():
             ],
         )
 
-        if st.button("📌 Fazer Solicitação"):
-            if opcao == "-- Selecionar --":
-                st.warning("Selecione uma opção válida.")
-            elif opcao == "Passagem Rodoviária":
-                st.markdown('<script>window.open("https://portalmse.com.br/index.php");</script>', unsafe_allow_html=True)
-            elif opcao == "Hospedagem":
-                st.markdown('<script>window.open("https://docs.google.com/forms/d/e/1FAIpQLSc7K3xq-fa_Hsw1yLel5pKILUVMM5kzhHbNRPDISGFke6aJ4A/viewform");</script>', unsafe_allow_html=True)
-            elif opcao == "Veículo":
-                st.markdown('<script>window.open("https://docs.google.com/forms/d/e/1FAIpQLSc-ImW1hPShhR0dUT2z77rRN0PJtPw93Pz6EBMkybPJW9r8eg/viewform");</script>', unsafe_allow_html=True)
-            elif opcao == "Hospedagem + Veículo":
-                st.success("Abrindo ambos os formulários...")
-                st.markdown('<script>window.open("https://docs.google.com/forms/d/e/1FAIpQLSc7K3xq-fa_Hsw1yLel5pKILUVMM5kzhHbNRPDISGFke6aJ4A/viewform");</script>', unsafe_allow_html=True)
-                st.markdown('<script>window.open("https://docs.google.com/forms/d/e/1FAIpQLSc-ImW1hPShhR0dUT2z77rRN0PJtPw93Pz6EBMkybPJW9r8eg/viewform");</script>', unsafe_allow_html=True)
+        if opcao == "Passagem Rodoviária":
+            st.link_button("Abrir Solicitação de Passagem",
+                           "https://portalmse.com.br/index.php")
 
+        elif opcao == "Hospedagem":
+            st.link_button("Abrir Solicitação de Hospedagem",
+                           "https://docs.google.com/forms/d/e/1FAIpQLSc7K3xq-fa_Hsw1yLel5pKILUVMM5kzhHbNRPDISGFke6aJ4A/viewform")
 
-# =========================================================
-# BOTÃO FINAL – COTAÇÃO
-# =========================================================
-if st.button("💰 Calcular Cotação"):
-    st.markdown("## 📌 Resultado da Cotação:")
+        elif opcao == "Veículo":
+            st.link_button("Abrir Solicitação de Veículo",
+                           "https://docs.google.com/forms/d/e/1FAIpQLSc-ImW1hPShhR0dUT2z77rRN0PJtPw93Pz6EBMkybPJW9r8eg/viewform")
 
-    if tipo == "rodoviario":
-        st.markdown(cotar_rodoviario(origem, destino))
-    elif tipo == "hospedagem":
-        st.markdown(cotar_hospedagem(destino, ida, volta))
-    elif tipo == "veiculo":
-        st.markdown(cotar_veiculo(origem, destino, ida, volta, grupo))
-    else:
-        st.markdown(cotar_geral(origem, destino, ida, volta, grupo))
