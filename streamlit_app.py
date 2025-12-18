@@ -12,7 +12,6 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# CSS Personalizado
 st.markdown("""
 <style>
     [data-testid="stSidebar"] { background-color: #f4f4f4; border-right: 1px solid #ddd; }
@@ -27,21 +26,23 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # =========================================================
-# 2. CONFIGURAÇÕES E DADOS
+# 2. DADOS E CHAVES (FIXOS IGUAL AO SCRIPT)
 # =========================================================
 
-# Tenta pegar chaves. Se falhar, define vazias.
-try:
-    MAPS_KEY = st.secrets.get("MAPS_KEY", "")
-    QP_USER = st.secrets.get("QP_USER", "mse")
-    QP_PASS = st.secrets.get("QP_PASS", "")
-except:
-    MAPS_KEY = ""
-    QP_USER = "mse"
-    QP_PASS = ""
+# SUA CHAVE REAL (A mesma do Script GS)
+MAPS_KEY = "AIzaSyA6B_wPkGZ0-jMoKxahLLpwhWFiyLdmxFk"
 
+# Configuração Quero Passagem
 QP_URL = "https://queropassagem.qpdevs.com/ws_v4"
 AFFILIATE = "MSE"
+
+# Tenta pegar segredos ou usa padrão se falhar
+try:
+    QP_USER = st.secrets.get("QP_USER", "mse")
+    QP_PASS = st.secrets.get("QP_PASS", "") 
+except:
+    QP_USER = "mse"
+    QP_PASS = ""
 
 DE_PARA_QP = {
     "sao paulo": "ROD_1", "são paulo": "ROD_1", "sp": "ROD_1",
@@ -57,36 +58,60 @@ TABELA_HOSPEDAGEM = {
 }
 
 # =========================================================
-# 3. INTEGRAÇÕES (COM CORREÇÃO DE DISTÂNCIA)
+# 3. INTEGRAÇÕES (CORRIGIDO PARA IGUALAR AO SCRIPT)
 # =========================================================
 
 def get_km_google(origem, destino):
-    """Retorna a distância em KM. Se falhar, retorna 0."""
-    if not MAPS_KEY: return 0 # Sem chave = 0 km
+    """Calcula KM igual ao Google Apps Script"""
+    if not MAPS_KEY: return 0
     
-    orig_fmt = origem if "Brasil" in origem else f"{origem}, Brasil"
-    dest_fmt = destino if "Brasil" in destino else f"{destino}, Brasil"
+    # Tratamento simples igual ao do Script
+    orig_fmt = origem.strip()
+    if "-" not in orig_fmt and "Brasil" not in orig_fmt: orig_fmt += ", Brasil"
     
+    dest_fmt = destino.strip()
+    if "-" not in dest_fmt and "Brasil" not in dest_fmt: dest_fmt += ", Brasil"
+
+    # URL Direta
     url = "https://maps.googleapis.com/maps/api/distancematrix/json"
-    params = {"origins": orig_fmt, "destinations": dest_fmt, "mode": "driving", "key": MAPS_KEY}
+    params = {
+        "origins": orig_fmt,
+        "destinations": dest_fmt,
+        "units": "metric",
+        "key": MAPS_KEY
+    }
     
     try:
         r = requests.get(url, params=params)
         data = r.json()
-        if data['status'] == 'OK' and data['rows'][0]['elements'][0]['status'] == 'OK':
-            metros = data['rows'][0]['elements'][0]['distance']['value']
+        
+        # DEBUG: Se der erro, mostra no console do Streamlit o motivo
+        if data.get('status') != 'OK':
+            print(f"Erro Geral API Maps: {data}")
+            return 0
+            
+        rows = data.get('rows', [])
+        if not rows: return 0
+        
+        element = rows[0].get('elements', [])[0]
+        
+        if element.get('status') == 'OK':
+            metros = element['distance']['value']
             return metros / 1000.0
+        else:
+            print(f"Erro Rota Maps: {element.get('status')}")
+            return 0
+            
     except Exception as e:
-        print(f"Erro Maps: {e}")
-    
-    return 0
+        print(f"Erro Técnico Maps: {e}")
+        return 0
 
 def buscar_passagem_api(origem, destino, data_iso):
     id_origem = DE_PARA_QP.get(origem.lower().strip())
     id_destino = DE_PARA_QP.get(destino.lower().strip())
 
     if not id_origem or not id_destino:
-        return {"erro": True, "msg": "Cidade não mapeada (Tente Capitais)."}
+        return {"erro": True, "msg": "Cidade não mapeada."}
 
     endpoint = f"{QP_URL}/new/search"
     body = {"from": id_origem, "to": id_destino, "travelDate": data_iso, "affiliateCode": AFFILIATE}
@@ -114,17 +139,14 @@ def calcular_dias(ida, volta):
 # =========================================================
 
 with st.sidebar:
-    # AQUI ESTÁ O SEU LOGO (PRECISA SUBIR O ARQUIVO 'LOGO MSE.png' PRO GITHUB)
     try:
         st.image("LOGO MSE.png", width=160)
     except:
-        st.warning("Imagem LOGO MSE.png não encontrada.")
-        
+        st.warning("Sem Logo")
+    
     st.markdown("### MSE TRAVEL EXPRESS")
     st.markdown("---")
     menu = st.radio("Navegação", ["Cotação Geral", "Rodoviário", "Veículo", "Hospedagem"])
-    st.markdown("---")
-    st.info("ℹ️ Sistema Integrado.")
 
 st.title(f"📊 {menu}")
 
@@ -149,15 +171,13 @@ if btn_calcular:
     if not origem or not destino:
         st.error("Preencha Origem e Destino.")
     else:
-        # 1. TENTA CALCULAR DISTÂNCIA REAL
+        # CHAMADA DO MAPS COM CHAVE FIXA
         km_dist = get_km_google(origem, destino)
         
-        # 2. SE FOR 0 (ERRO API), USA UMA DISTÂNCIA SIMULADA PARA NÃO ZERAR O CÁLCULO
-        usou_simulacao = False
+        # Debug Visual para confirmar que calculou
         if km_dist == 0:
-            km_dist = 450 # Simulação de ~450km (Tipo SP-Rio)
-            usou_simulacao = True
-
+            st.warning("⚠️ Atenção: Não foi possível calcular a distância exata. Verifique os nomes das cidades.")
+        
         c1, c2, c3 = st.columns(3)
 
         # RODOVIÁRIO
@@ -175,11 +195,11 @@ if btn_calcular:
                     </div>""", unsafe_allow_html=True)
                 else:
                     est = km_dist * 0.50
-                    aviso = "(API Offline - Valor Estimado)" if usou_simulacao else "(Sem rota ônibus - Valor por KM)"
                     st.markdown(f"""
                     <div class="result-card" style="border-left: 5px solid gray;">
                         <div class="card-title">🚌 Estimativa KM</div>
-                        <div class="info-text" style="color:red;">{aviso}</div>
+                        <div class="info-text" style="color:red;">{api_res['msg']}</div>
+                        <div class="info-text">Distância: {km_dist:.1f} km</div>
                         <div class="price-big" style="color:#666;">R$ {est:.2f}</div>
                     </div>""", unsafe_allow_html=True)
 
@@ -196,30 +216,22 @@ if btn_calcular:
                     <div class="price-big">R$ {total:.2f}</div>
                 </div>""", unsafe_allow_html=True)
 
-        # VEÍCULO (AQUI ESTAVA O PROBLEMA)
+        # VEÍCULO
         if menu in ["Veículo", "Cotação Geral"]:
             with (c3 if menu == "Cotação Geral" else st.container()):
                 dias = calcular_dias(data_ida, data_volta)
                 is_auto = "EA" in (grupo_carro or "")
-                
                 diaria = 203.44 if is_auto else 151.92
                 consumo = 9 if is_auto else 13
                 
-                # CÁLCULO COMBUSTÍVEL
-                # Ida e Volta (km_dist * 2)
-                litros = (km_dist * 2) / consumo
-                comb = litros * 5.80
-                
+                # CÁLCULO DIRETO COM O KM OBTIDO
+                comb = ((km_dist * 2) / consumo) * 5.80
                 total = (diaria * dias) + comb
                 
-                texto_km = f"{km_dist:.0f} km"
-                if usou_simulacao:
-                    texto_km += " (Simulado - Erro API)"
-
                 st.markdown(f"""
                 <div class="result-card">
                     <div class="card-title" style="color:#2980B9;">🚗 Carro + Comb.</div>
-                    <div class="info-text"><b>Distância:</b> {texto_km}</div>
+                    <div class="info-text"><b>Distância:</b> {km_dist:.1f} km</div>
                     <div class="info-text"><b>Locação:</b> R$ {(diaria*dias):.2f}</div>
                     <div class="info-text"><b>Combustível:</b> R$ {comb:.2f}</div>
                     <div class="price-big">R$ {total:.2f}</div>
