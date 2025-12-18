@@ -3,7 +3,7 @@ import requests
 from datetime import date, timedelta
 
 # =========================================================
-# 1. CONFIGURAÇÃO VISUAL
+# 1. CONFIGURAÇÃO VISUAL E REMOÇÃO DE BARRA SUPERIOR
 # =========================================================
 st.set_page_config(
     page_title="Portal MSE Travel",
@@ -12,16 +12,70 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+# CSS COMBINADO: Visual Corporativo + Esconder Barra do Streamlit
 st.markdown("""
 <style>
-    [data-testid="stSidebar"] { background-color: #f4f4f4; border-right: 1px solid #ddd; }
+    /* --- ESCONDER ELEMENTOS PADRÃO DO STREAMLIT --- */
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    header {visibility: hidden;}
+    
+    /* Ajustar o topo para subir o conteúdo (já que tiramos a barra) */
+    .block-container {
+        padding-top: 2rem;
+    }
+
+    /* --- ESTILO CORPORATIVO MSE --- */
+    [data-testid="stSidebar"] { 
+        background-color: #f4f4f4; 
+        border-right: 1px solid #ddd; 
+    }
+    
     h1, h2, h3 { color: #8B0000; }
-    .stButton>button { background-color: #8B0000; color: white; border-radius: 8px; font-weight: bold; border: none; width: 100%; padding: 10px; transition: 0.3s; }
-    .stButton>button:hover { background-color: #600000; color: white; }
-    .result-card { background-color: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); border-left: 5px solid #8B0000; margin-bottom: 20px; }
-    .card-title { font-weight: bold; font-size: 1.1em; color: #555; margin-bottom: 10px; text-transform: uppercase; }
-    .price-big { font-size: 1.8em; font-weight: 800; color: #2E7D32; }
-    .info-text { color: #666; font-size: 0.9em; margin-bottom: 5px; }
+    
+    .stButton>button { 
+        background-color: #8B0000; 
+        color: white; 
+        border-radius: 8px; 
+        font-weight: bold; 
+        border: none; 
+        width: 100%; 
+        padding: 10px; 
+        transition: 0.3s; 
+    }
+    .stButton>button:hover { 
+        background-color: #600000; 
+        color: white; 
+    }
+    
+    .result-card { 
+        background-color: white; 
+        padding: 20px; 
+        border-radius: 10px; 
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1); 
+        border-left: 5px solid #8B0000; 
+        margin-bottom: 20px; 
+    }
+    
+    .card-title { 
+        font-weight: bold; 
+        font-size: 1.1em; 
+        color: #555; 
+        margin-bottom: 10px; 
+        text-transform: uppercase; 
+    }
+    
+    .price-big { 
+        font-size: 1.8em; 
+        font-weight: 800; 
+        color: #2E7D32; 
+    }
+    
+    .info-text { 
+        color: #666; 
+        font-size: 0.9em; 
+        margin-bottom: 5px; 
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -29,10 +83,9 @@ st.markdown("""
 # 2. SEGURANÇA E DADOS
 # =========================================================
 
-# Busca a chave nos segredos. Se não achar, avisa.
+# Busca a chave nos segredos.
 try:
     MAPS_KEY = st.secrets["MAPS_KEY"]
-    # Se tiver user/pass da QP no futuro, pegue aqui também
     QP_USER = st.secrets.get("QP_USER", "mse")
     QP_PASS = st.secrets.get("QP_PASS", "")
 except FileNotFoundError:
@@ -86,7 +139,6 @@ def get_km_google(origem, destino):
         data = r.json()
         
         if data.get('status') != 'OK':
-            print(f"Erro API: {data.get('status')}")
             return 0
             
         rows = data.get('rows', [])
@@ -114,7 +166,6 @@ def buscar_passagem_api(origem, destino, data_iso):
     body = {"from": id_origem, "to": id_destino, "travelDate": data_iso, "affiliateCode": AFFILIATE}
 
     try:
-        # Passando User/Pass vazios se não tiver secrets da QP, mas a estrutura está pronta
         r = requests.post(endpoint, json=body, auth=(QP_USER, QP_PASS))
         
         if r.status_code == 200:
@@ -141,9 +192,9 @@ with st.sidebar:
     try:
         st.image("LOGO MSE.png", width=160)
     except:
-        st.warning("Logo não encontrado")
+        # Se não achar a imagem, mostra um aviso discreto ou nada
+        st.markdown("### MSE TRAVEL")
     
-    st.markdown("### MSE TRAVEL EXPRESS")
     st.markdown("---")
     menu = st.radio("Navegação", ["Cotação Geral", "Rodoviário", "Veículo", "Hospedagem"])
 
@@ -173,7 +224,7 @@ if btn_calcular:
         km_dist = get_km_google(origem, destino)
         
         if km_dist == 0:
-            st.warning("⚠️ Distância não calculada. Verifique nomes ou chave de API.")
+            st.warning("⚠️ Distância não calculada automaticamente. Verifique se a cidade existe ou insira o Estado.")
         
         c1, c2, c3 = st.columns(3)
 
@@ -234,4 +285,5 @@ st.markdown("### 📌 Próximos Passos")
 ca, cb, cc = st.columns(3)
 with ca: st.link_button("🚌 Solicitar Passagem", "https://portalmse.com.br/index.php", use_container_width=True)
 with cb: st.link_button("🚗 Solicitar Veículo", "https://docs.google.com/forms/d/e/1FAIpQLSc-ImW1hPShhR0dUT2z77rRN0PJtPw93Pz6EBMkybPJW9r8eg/viewform", use_container_width=True)
-with cc: st.link_button("🏨 Solicitar Hotel", "https://docs.google.com/forms/d/e/1FAIpQLSc7K3xq-fa_Hsw1yLel5pKILUVMM5kzhHbNRPDISGFke6aJ4A/viewform", use_container_width=True)
+with cc: st.link_button("🏨 Solicitar Hotel", "https://docs.google.com/forms/d/e/1FAIpQLSc7K3xq-fa_Hsw1yLel5pKILUVMM5kzhHbNRPDISGFke6aJ4A/viewform", use_container_width=True)AIpQLSc7K3xq-fa_Hsw1yLel5pKILUVMM5kzhHbNRPDISGFke6aJ4A/viewform", use_container_width=True)
+
