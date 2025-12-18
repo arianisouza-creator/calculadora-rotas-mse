@@ -12,14 +12,37 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# CSS COMBINADO: Visual Corporativo + Esconder Barra do Streamlit
+# CSS COMBINADO: Visual Corporativo + Esconder TUDO do Streamlit (Barras, Menus, Rodapés)
 st.markdown("""
 <style>
     /* --- ESCONDER ELEMENTOS PADRÃO DO STREAMLIT --- */
+    
+    /* Esconde o menu de hambúrguer (três riscos) no topo */
     #MainMenu {visibility: hidden;}
+    
+    /* Esconde o rodapé padrão (onde ficam os ícones de coroa e 'Made with Streamlit') */
     footer {visibility: hidden;}
+    
+    /* Esconde a barra colorida no topo da tela */
     header {visibility: hidden;}
     
+    /* Esconde especificamente o botão 'Gerenciar Aplicativo' / 'Deploy' */
+    .stDeployButton {
+        display: none;
+        visibility: hidden;
+    }
+    
+    /* Esconde a barra de ferramentas inferior (os botões coloridos que você mandou na foto) */
+    [data-testid="stToolbar"] {
+        visibility: hidden;
+        height: 0%;
+    }
+    
+    /* Remove a decoração padrão do Streamlit */
+    [data-testid="stDecoration"] {
+        display: none;
+    }
+
     /* Ajustar o topo para subir o conteúdo (já que tiramos a barra) */
     .block-container {
         padding-top: 2rem;
@@ -286,4 +309,5 @@ ca, cb, cc = st.columns(3)
 with ca: st.link_button("🚌 Solicitar Passagem", "https://portalmse.com.br/index.php", use_container_width=True)
 with cb: st.link_button("🚗 Solicitar Veículo", "https://docs.google.com/forms/d/e/1FAIpQLSc-ImW1hPShhR0dUT2z77rRN0PJtPw93Pz6EBMkybPJW9r8eg/viewform", use_container_width=True)
 with cc: st.link_button("🏨 Solicitar Hotel", "https://docs.google.com/forms/d/e/1FAIpQLSc7K3xq-fa_Hsw1yLel5pKILUVMM5kzhHbNRPDISGFke6aJ4A/viewform", use_container_width=True)
+
 
