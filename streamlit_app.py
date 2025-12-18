@@ -3,7 +3,7 @@ import requests
 from datetime import date, timedelta
 
 # =========================================================
-# 1. CONFIGURAÇÃO VISUAL (CORPORATIVA MSE)
+# 1. CONFIGURAÇÃO VISUAL
 # =========================================================
 st.set_page_config(
     page_title="Portal MSE Travel",
@@ -12,55 +12,17 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# CSS Personalizado (Vermelho MSE e Cards)
+# CSS Personalizado
 st.markdown("""
 <style>
-    [data-testid="stSidebar"] {
-        background-color: #f4f4f4;
-        border-right: 1px solid #ddd;
-    }
-    h1, h2, h3 {
-        color: #8B0000;
-    }
-    .stButton>button {
-        background-color: #8B0000;
-        color: white;
-        border-radius: 8px;
-        font-weight: bold;
-        border: none;
-        width: 100%;
-        padding: 10px;
-        transition: 0.3s;
-    }
-    .stButton>button:hover {
-        background-color: #600000;
-        color: white;
-    }
-    .result-card {
-        background-color: white;
-        padding: 20px;
-        border-radius: 10px;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-        border-left: 5px solid #8B0000;
-        margin-bottom: 20px;
-    }
-    .card-title {
-        font-weight: bold;
-        font-size: 1.1em;
-        color: #555;
-        margin-bottom: 10px;
-        text-transform: uppercase;
-    }
-    .price-big {
-        font-size: 1.8em;
-        font-weight: 800;
-        color: #2E7D32;
-    }
-    .info-text {
-        color: #666;
-        font-size: 0.9em;
-        margin-bottom: 5px;
-    }
+    [data-testid="stSidebar"] { background-color: #f4f4f4; border-right: 1px solid #ddd; }
+    h1, h2, h3 { color: #8B0000; }
+    .stButton>button { background-color: #8B0000; color: white; border-radius: 8px; font-weight: bold; border: none; width: 100%; padding: 10px; transition: 0.3s; }
+    .stButton>button:hover { background-color: #600000; color: white; }
+    .result-card { background-color: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); border-left: 5px solid #8B0000; margin-bottom: 20px; }
+    .card-title { font-weight: bold; font-size: 1.1em; color: #555; margin-bottom: 10px; text-transform: uppercase; }
+    .price-big { font-size: 1.8em; font-weight: 800; color: #2E7D32; }
+    .info-text { color: #666; font-size: 0.9em; margin-bottom: 5px; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -68,17 +30,15 @@ st.markdown("""
 # 2. CONFIGURAÇÕES E DADOS
 # =========================================================
 
-# Tenta pegar dos Segredos (Local ou Cloud)
+# Tenta pegar chaves. Se falhar, define vazias.
 try:
-    MAPS_KEY = st.secrets["MAPS_KEY"]
-    QP_USER = st.secrets["QP_USER"]
-    QP_PASS = st.secrets["QP_PASS"]
+    MAPS_KEY = st.secrets.get("MAPS_KEY", "")
+    QP_USER = st.secrets.get("QP_USER", "mse")
+    QP_PASS = st.secrets.get("QP_PASS", "")
 except:
-    # Se não configurar, avisa para não quebrar
     MAPS_KEY = ""
-    QP_USER = ""
+    QP_USER = "mse"
     QP_PASS = ""
-    st.warning("⚠️ As chaves de API não foram configuradas no arquivo .streamlit/secrets.toml")
 
 QP_URL = "https://queropassagem.qpdevs.com/ws_v4"
 AFFILIATE = "MSE"
@@ -97,13 +57,16 @@ TABELA_HOSPEDAGEM = {
 }
 
 # =========================================================
-# 3. FUNÇÕES DE INTEGRAÇÃO (BACKEND)
+# 3. INTEGRAÇÕES (COM CORREÇÃO DE DISTÂNCIA)
 # =========================================================
 
 def get_km_google(origem, destino):
-    if not MAPS_KEY: return 0
+    """Retorna a distância em KM. Se falhar, retorna 0."""
+    if not MAPS_KEY: return 0 # Sem chave = 0 km
+    
     orig_fmt = origem if "Brasil" in origem else f"{origem}, Brasil"
     dest_fmt = destino if "Brasil" in destino else f"{destino}, Brasil"
+    
     url = "https://maps.googleapis.com/maps/api/distancematrix/json"
     params = {"origins": orig_fmt, "destinations": dest_fmt, "mode": "driving", "key": MAPS_KEY}
     
@@ -111,9 +74,11 @@ def get_km_google(origem, destino):
         r = requests.get(url, params=params)
         data = r.json()
         if data['status'] == 'OK' and data['rows'][0]['elements'][0]['status'] == 'OK':
-            return data['rows'][0]['elements'][0]['distance']['value'] / 1000
+            metros = data['rows'][0]['elements'][0]['distance']['value']
+            return metros / 1000.0
     except Exception as e:
         print(f"Erro Maps: {e}")
+    
     return 0
 
 def buscar_passagem_api(origem, destino, data_iso):
@@ -132,7 +97,7 @@ def buscar_passagem_api(origem, destino, data_iso):
             res = r.json()
             lista = res[0] if (isinstance(res, list) and len(res) > 0 and isinstance(res[0], list)) else res
             disponiveis = [v for v in lista if v.get('availableSeats', 0) > 0]
-            if not disponiveis: return {"erro": True, "msg": "Sem viagens disponíveis."}
+            if not disponiveis: return {"erro": True, "msg": "Sem viagens."}
             disponiveis.sort(key=lambda x: x['price'])
             return {"erro": False, "dados": disponiveis[0]}
     except Exception as e:
@@ -145,15 +110,21 @@ def calcular_dias(ida, volta):
     return delta if delta > 0 else 1
 
 # =========================================================
-# 4. INTERFACE E LÓGICA
+# 4. FRONTEND
 # =========================================================
 
 with st.sidebar:
+    # AQUI ESTÁ O SEU LOGO (PRECISA SUBIR O ARQUIVO 'LOGO MSE.png' PRO GITHUB)
+    try:
+        st.image("LOGO MSE.png", width=160)
+    except:
+        st.warning("Imagem LOGO MSE.png não encontrada.")
+        
     st.markdown("### MSE TRAVEL EXPRESS")
     st.markdown("---")
     menu = st.radio("Navegação", ["Cotação Geral", "Rodoviário", "Veículo", "Hospedagem"])
     st.markdown("---")
-    st.info("ℹ️ Sistema integrado.")
+    st.info("ℹ️ Sistema Integrado.")
 
 st.title(f"📊 {menu}")
 
@@ -178,7 +149,15 @@ if btn_calcular:
     if not origem or not destino:
         st.error("Preencha Origem e Destino.")
     else:
+        # 1. TENTA CALCULAR DISTÂNCIA REAL
         km_dist = get_km_google(origem, destino)
+        
+        # 2. SE FOR 0 (ERRO API), USA UMA DISTÂNCIA SIMULADA PARA NÃO ZERAR O CÁLCULO
+        usou_simulacao = False
+        if km_dist == 0:
+            km_dist = 450 # Simulação de ~450km (Tipo SP-Rio)
+            usou_simulacao = True
+
         c1, c2, c3 = st.columns(3)
 
         # RODOVIÁRIO
@@ -196,10 +175,11 @@ if btn_calcular:
                     </div>""", unsafe_allow_html=True)
                 else:
                     est = km_dist * 0.50
+                    aviso = "(API Offline - Valor Estimado)" if usou_simulacao else "(Sem rota ônibus - Valor por KM)"
                     st.markdown(f"""
                     <div class="result-card" style="border-left: 5px solid gray;">
                         <div class="card-title">🚌 Estimativa KM</div>
-                        <div class="info-text" style="color:red;">{api_res['msg']}</div>
+                        <div class="info-text" style="color:red;">{aviso}</div>
                         <div class="price-big" style="color:#666;">R$ {est:.2f}</div>
                     </div>""", unsafe_allow_html=True)
 
@@ -216,18 +196,30 @@ if btn_calcular:
                     <div class="price-big">R$ {total:.2f}</div>
                 </div>""", unsafe_allow_html=True)
 
-        # VEÍCULO
+        # VEÍCULO (AQUI ESTAVA O PROBLEMA)
         if menu in ["Veículo", "Cotação Geral"]:
             with (c3 if menu == "Cotação Geral" else st.container()):
                 dias = calcular_dias(data_ida, data_volta)
                 is_auto = "EA" in (grupo_carro or "")
+                
                 diaria = 203.44 if is_auto else 151.92
                 consumo = 9 if is_auto else 13
-                comb = ((km_dist * 2) / consumo) * 5.80
+                
+                # CÁLCULO COMBUSTÍVEL
+                # Ida e Volta (km_dist * 2)
+                litros = (km_dist * 2) / consumo
+                comb = litros * 5.80
+                
                 total = (diaria * dias) + comb
+                
+                texto_km = f"{km_dist:.0f} km"
+                if usou_simulacao:
+                    texto_km += " (Simulado - Erro API)"
+
                 st.markdown(f"""
                 <div class="result-card">
                     <div class="card-title" style="color:#2980B9;">🚗 Carro + Comb.</div>
+                    <div class="info-text"><b>Distância:</b> {texto_km}</div>
                     <div class="info-text"><b>Locação:</b> R$ {(diaria*dias):.2f}</div>
                     <div class="info-text"><b>Combustível:</b> R$ {comb:.2f}</div>
                     <div class="price-big">R$ {total:.2f}</div>
