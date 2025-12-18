@@ -1,282 +1,334 @@
 import streamlit as st
-import threading
-from fastapi import FastAPI, Request
-from fastapi.middleware.cors import CORSMiddleware
-import uvicorn
 import requests
-import json
-from datetime import datetime, date
+from datetime import date, timedelta
+import base64
 
 # =========================================================
-# CONFIGURAÇÕES
+# 1. CONFIGURAÇÃO VISUAL (CORPORATIVA MSE)
 # =========================================================
-API_KEY = "AIzaSyA6B_wPkGZ0-jMoKxahLLpwhWFiyLdmxFk"
-PRECO_KM = 0.50
+st.set_page_config(
+    page_title="Portal MSE Travel",
+    page_icon="✈️",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
-CIDADES_BR = {
-    "londrina": "Londrina - PR",
-    "curitiba": "Curitiba - PR",
-    "maringa": "Maringá - PR",
-    "foz do iguacu": "Foz do Iguaçu - PR",
-    "sao paulo": "São Paulo - SP",
-    "campinas": "Campinas - SP",
-    "santos": "Santos - SP",
-    "teresina": "Teresina - PI",
-    "fortaleza": "Fortaleza - CE",
-    "recife": "Recife - PE",
-    "salvador": "Salvador - BA",
-    "aracaju": "Aracaju - SE",
-    "maceio": "Maceió - AL",
-    "joao pessoa": "João Pessoa - PB",
-    "natal": "Natal - RN",
-    "belem": "Belém - PA",
-    "macapa": "Macapá - AP",
-    "palmas": "Palmas - TO",
-    "porto alegre": "Porto Alegre - RS",
-    "florianopolis": "Florianópolis - SC",
-    "manaus": "Manaus - AM",
-    "rio branco": "Rio Branco - AC",
-    "boa vista": "Boa Vista - RR",
-    "brasilia": "Brasília - DF",
-    "goiania": "Goiânia - GO",
-    "cuiaba": "Cuiabá - MT",
-    "belo horizonte": "Belo Horizonte - MG",
-    "bh": "Belo Horizonte - MG",
+# CSS Personalizado (Vermelho MSE e Cards)
+st.markdown("""
+<style>
+    /* Cor de Fundo da Sidebar */
+    [data-testid="stSidebar"] {
+        background-color: #f4f4f4;
+        border-right: 1px solid #ddd;
+    }
+    /* Títulos */
+    h1, h2, h3 {
+        color: #8B0000; /* Vermelho Sangue */
+    }
+    /* Botões Principais */
+    .stButton>button {
+        background-color: #8B0000;
+        color: white;
+        border-radius: 8px;
+        font-weight: bold;
+        border: none;
+        width: 100%;
+        padding: 10px;
+        transition: 0.3s;
+    }
+    .stButton>button:hover {
+        background-color: #600000;
+        color: white;
+    }
+    /* Cards de Resultado */
+    .result-card {
+        background-color: white;
+        padding: 20px;
+        border-radius: 10px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        border-left: 5px solid #8B0000;
+        margin-bottom: 20px;
+    }
+    .card-title {
+        font-weight: bold;
+        font-size: 1.1em;
+        color: #555;
+        margin-bottom: 10px;
+        text-transform: uppercase;
+    }
+    .price-big {
+        font-size: 1.8em;
+        font-weight: 800;
+        color: #2E7D32; /* Verde Dinheiro */
+    }
+    .info-text {
+        color: #666;
+        font-size: 0.9em;
+        margin-bottom: 5px;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+# =========================================================
+# 2. CONFIGURAÇÕES E DADOS
+# =========================================================
+
+# Tenta pegar dos Segredos (Cloud) ou usa valores vazios/teste
+try:
+    MAPS_KEY = st.secrets["MAPS_KEY"]
+    QP_USER = st.secrets["QP_USER"]
+    QP_PASS = st.secrets["QP_PASS"]
+except:
+    # Fallback para rodar local se não tiver secrets configurado ainda
+    MAPS_KEY = "" 
+    QP_USER = "mse"
+    QP_PASS = "" # Coloque a senha aqui se for rodar local
+
+QP_URL = "https://queropassagem.qpdevs.com/ws_v4"
+AFFILIATE = "MSE"
+
+# Mapeamento de Cidades (Nome -> ID API)
+DE_PARA_QP = {
+    "sao paulo": "ROD_1", "são paulo": "ROD_1", "sp": "ROD_1",
+    "rio de janeiro": "ROD_55", "rio": "ROD_55", "rj": "ROD_55",
+    "curitiba": "ROD_3",
+    "belo horizonte": "ROD_7", "bh": "ROD_7",
+    "londrina": "ROD_23",
+    "florianopolis": "ROD_6",
+    "brasilia": "ROD_2",
+    "campinas": "ROD_13",
+    "santos": "ROD_10"
+}
+
+TABELA_HOSPEDAGEM = { 
+    "SP": 350, "RJ": 305, "PR": 250, "SC": 300, "MG": 310, "RS": 280, 
+    "BA": 210, "DF": 260, "GO": 230, "PE": 170, "CE": 350 
 }
 
 # =========================================================
-# FUNÇÕES BASE
+# 3. FUNÇÕES DE INTEGRAÇÃO (BACKEND)
 # =========================================================
-def ajustar_cidade(cidade):
-    if not cidade:
-        return ""
-    cidade = cidade.lower().strip()
-    return CIDADES_BR.get(cidade, cidade + ", Brasil")
 
+def get_km_google(origem, destino):
+    """Calcula distância via Google Maps"""
+    if not MAPS_KEY: return 0
+    
+    # Adiciona "Brasil" para melhorar precisão
+    orig_fmt = origem if "Brasil" in origem else f"{origem}, Brasil"
+    dest_fmt = destino if "Brasil" in destino else f"{destino}, Brasil"
 
-def get_km(origem, destino):
-    origem = ajustar_cidade(origem)
-    destino = ajustar_cidade(destino)
+    url = "https://maps.googleapis.com/maps/api/distancematrix/json"
+    params = {
+        "origins": orig_fmt,
+        "destinations": dest_fmt,
+        "mode": "driving",
+        "key": MAPS_KEY
+    }
+    
+    try:
+        r = requests.get(url, params=params)
+        data = r.json()
+        if data['status'] == 'OK':
+            elem = data['rows'][0]['elements'][0]
+            if elem['status'] == 'OK':
+                return elem['distance']['value'] / 1000 # Retorna em KM
+    except Exception as e:
+        print(f"Erro Maps: {e}")
+    
+    return 0 # Fallback
 
-    url = (
-        "https://maps.googleapis.com/maps/api/distancematrix/json?units=metric"
-        f"&origins={origem}&destinations={destino}&key={API_KEY}"
-    )
+def buscar_passagem_api(origem, destino, data_iso):
+    """Consulta API da Quero Passagem"""
+    id_origem = DE_PARA_QP.get(origem.lower().strip())
+    id_destino = DE_PARA_QP.get(destino.lower().strip())
+
+    # Se não tiver mapeado, retorna erro controlado
+    if not id_origem or not id_destino:
+        return {"erro": True, "msg": "Cidade não mapeada (Tente Capitais)."}
+
+    endpoint = f"{QP_URL}/new/search"
+    body = {
+        "from": id_origem,
+        "to": id_destino,
+        "travelDate": data_iso,
+        "affiliateCode": AFFILIATE
+    }
 
     try:
-        res = requests.get(url).json()
-        elem = res["rows"][0]["elements"][0]
-        return elem["distance"]["value"] / 1000 if elem["status"] == "OK" else 0
-    except:
-        return 0
-
+        # Autenticação Basic Auth Automática do Requests
+        r = requests.post(endpoint, json=body, auth=(QP_USER, QP_PASS))
+        
+        if r.status_code == 200:
+            res = r.json()
+            # A API pode retornar lista de lista ou lista simples
+            lista = res[0] if (isinstance(res, list) and len(res) > 0 and isinstance(res[0], list)) else res
+            
+            # Filtra e Ordena
+            disponiveis = [v for v in lista if v.get('availableSeats', 0) > 0]
+            if not disponiveis:
+                return {"erro": True, "msg": "Sem viagens disponíveis."}
+            
+            disponiveis.sort(key=lambda x: x['price'])
+            return {"erro": False, "dados": disponiveis[0]} # Retorna a mais barata
+            
+    except Exception as e:
+        return {"erro": True, "msg": f"Erro API: {str(e)}"}
+    
+    return {"erro": True, "msg": "Erro desconhecido."}
 
 def calcular_dias(ida, volta):
-    if not ida or not volta:
-        return 1
-    return (volta - ida).days or 1
-
-
-# =========================================================
-# VEÍCULO
-# =========================================================
-TABELA_DIARIA = {"B": 151.92, "EA": 203.44}
-
-def cotar_veiculo(origem, destino, ida, volta, grupo):
-    km = get_km(origem, destino)
-    dias = calcular_dias(ida, volta)
-
-    diaria = TABELA_DIARIA.get(grupo, 0)
-    valor_diarias = diaria * dias
-
-    consumo = 13 if grupo == "B" else 9
-    preco_comb = 5.80
-
-    litros = (km * 2) / consumo
-    valor_comb = litros * preco_comb
-
-    total = valor_diarias + valor_comb
-
-    return (
-        f"🚗 **Locação de Veículo**\n\n"
-        f"- Dias: **{dias}**\n"
-        f"- Valor das diárias: **R$ {valor_diarias:.2f}**\n"
-        f"- Combustível: **R$ {valor_comb:.2f}**\n\n"
-        f"### 💰 TOTAL: R$ {total:.2f}"
-    )
-
+    if not ida or not volta: return 1
+    delta = (volta - ida).days
+    return delta if delta > 0 else 1
 
 # =========================================================
-# HOSPEDAGEM
-# =========================================================
-TABELA_HOSPEDAGEM = {
-    "AC": 200, "AL": 200, "AP": 300, "AM": 350,
-    "BA": 210, "CE": 350, "DF": 260, "ES": 300,
-    "GO": 230, "MA": 260, "MT": 260, "MS": 260,
-    "MG": 310, "PA": 300, "PB": 300, "PR": 250,
-    "PE": 170, "PI": 160, "RJ": 305, "RN": 250,
-    "RS": 280, "RO": 300, "RR": 300, "SC": 300,
-    "SP": 350, "SE": 190, "TO": 270
-}
-
-def extrair_uf(dest):
-    if "-" not in dest:
-        return None
-    return dest.split("-")[1].strip().upper()
-
-
-def cotar_hospedagem(dest, ida, volta):
-    uf = extrair_uf(dest)
-    if not uf or uf not in TABELA_HOSPEDAGEM:
-        return "Destino inválido."
-
-    dias = calcular_dias(ida, volta) + 1
-    valor = dias * TABELA_HOSPEDAGEM[uf]
-
-    return (
-        f"🏨 **Hospedagem**\n\n"
-        f"- UF: **{uf}**\n"
-        f"- Diárias: **{dias}**\n\n"
-        f"### TOTAL: R$ {valor:.2f}"
-    )
-
-
-# =========================================================
-# RODOVIÁRIO
-# =========================================================
-def cotar_rodoviario(origem, destino):
-    km = get_km(origem, destino)
-    valor = km * PRECO_KM
-    return (
-        f"🚌 **Passagem Rodoviária**\n\n"
-        f"- Distância: **{km:.1f} km**\n"
-        f"### TOTAL: R$ {valor:.2f}"
-    )
-
-
-# =========================================================
-# COTAÇÃO GERAL
-# =========================================================
-def cotar_geral(origem, destino, ida, volta, grupo):
-    return (
-        f"{cotar_rodoviario(origem, destino)}\n\n---\n\n"
-        f"{cotar_hospedagem(destino, ida, volta)}\n\n---\n\n"
-        f"{cotar_veiculo(origem, destino, ida, volta, grupo)}"
-    )
-
-
-# =========================================================
-# FASTAPI BACKEND
-# =========================================================
-app = FastAPI()
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-
-@app.post("/api")
-async def api_calc(request: Request):
-    data = await request.json()
-
-    tipo = data.get("tipo")
-    origem = data.get("origem", "")
-    destino = data.get("destino", "")
-    ida = data.get("ida")
-    volta = data.get("volta")
-    grupo = data.get("grupo")
-
-    ida = datetime.strptime(ida, "%Y-%m-%d").date() if ida else None
-    volta = datetime.strptime(volta, "%Y-%m-%d").date() if volta else None
-
-    if tipo == "rodoviario":
-        resultado = cotar_rodoviario(origem, destino)
-    elif tipo == "hospedagem":
-        resultado = cotar_hospedagem(destino, ida, volta)
-    elif tipo == "veiculo":
-        resultado = cotar_veiculo(origem, destino, ida, volta, grupo)
-    elif tipo == "geral":
-        resultado = cotar_geral(origem, destino, ida, volta, grupo)
-    else:
-        resultado = "Tipo inválido."
-
-    return {"resultado": resultado}
-
-
-# =========================================================
-# THREAD PARA RODAR API
-# =========================================================
-def start_api():
-    uvicorn.run(app, host="0.0.0.0", port=8000)
-
-threading.Thread(target=start_api, daemon=True).start()
-
-
-# =========================================================
-# INTERFACE STREAMLIT — PORTAL MSE
+# 4. INTERFACE DO USUÁRIO (FRONTEND)
 # =========================================================
 
-# Logo no topo
-st.image("LOGO MSE.png", width=160)
-st.markdown("<h1 style='text-align:center; color:#7A0000;'>MSE TRAVEL EXPRESS</h1>", unsafe_allow_html=True)
+# Sidebar
+with st.sidebar:
+    st.image("https://cdn-icons-png.flaticon.com/512/723/723955.png", width=50) # Placeholder Logo
+    st.markdown("### MSE TRAVEL EXPRESS")
+    st.markdown("---")
+    menu = st.radio("Navegação", ["Cotação Geral", "Rodoviário", "Veículo", "Hospedagem"])
+    st.markdown("---")
+    st.info("ℹ️ Sistema integrado com Quero Passagem e Google Maps.")
+
+# Título Principal
+st.title(f"📊 {menu}")
+st.markdown("Preencha os dados abaixo para realizar a cotação corporativa.")
+
+# Formulário Unificado
+with st.container():
+    col1, col2 = st.columns(2)
+    with col1:
+        origem = st.text_input("Cidade de Origem", placeholder="Ex: São Paulo")
+        data_ida = st.date_input("Data de Ida", date.today())
+    with col2:
+        destino = st.text_input("Cidade de Destino", placeholder="Ex: Rio de Janeiro")
+        if menu != "Rodoviário": # Ônibus API só vê Ida por enquanto
+            data_volta = st.date_input("Data de Volta", date.today() + timedelta(days=1))
+        else:
+            data_volta = None
+
+    grupo_carro = None
+    if menu in ["Veículo", "Cotação Geral"]:
+        grupo_carro = st.selectbox("Categoria do Veículo", ["B - Econômico (Manual)", "EA - Executivo (Automático)"])
+
+    btn_calcular = st.button("CALCULAR COTAÇÃO 🚀")
 
 st.markdown("---")
 
-tipo = st.selectbox(
-    "Selecione o tipo de cotação:",
-    ["Rodoviário", "Hospedagem", "Veículo", "Cotação Geral"]
-)
+# =========================================================
+# 5. LÓGICA DE PROCESSAMENTO E EXIBIÇÃO
+# =========================================================
 
-origem = None
-destino = None
-
-if tipo != "Hospedagem":
-    origem = st.text_input("Origem:")
-
-destino = st.text_input("Destino (Cidade - UF):")
-
-ida = st.date_input("Data de Ida:", date.today())
-volta = st.date_input("Data de Volta:", date.today())
-
-grupo = None
-if tipo in ["Veículo", "Cotação Geral"]:
-    grupo = st.selectbox("Grupo do Veículo:", ["B", "EA"])
-
-if st.button("Calcular Cotação"):
-    if tipo == "Rodoviário":
-        st.info(cotar_rodoviario(origem, destino))
-    elif tipo == "Hospedagem":
-        st.info(cotar_hospedagem(destino, ida, volta))
-    elif tipo == "Veículo":
-        st.info(cotar_veiculo(origem, destino, ida, volta, grupo))
+if btn_calcular:
+    if not origem or not destino:
+        st.error("Por favor, preencha Origem e Destino.")
     else:
-        st.success(cotar_geral(origem, destino, ida, volta, grupo))
+        # 1. Obter Distância (Uma vez para todos)
+        km_dist = get_km_google(origem, destino)
+        
+        # Colunas de Resultado
+        res_col1, res_col2, res_col3 = st.columns(3)
+
+        # --- A. RODOVIÁRIO ---
+        if menu in ["Rodoviário", "Cotação Geral"]:
+            with res_col1 if menu == "Cotação Geral" else st.container():
+                api_res = buscar_passagem_api(origem, destino, str(data_ida))
+                
+                if not api_res['erro']:
+                    v = api_res['dados']
+                    st.markdown(f"""
+                    <div class="result-card">
+                        <div class="card-title" style="color:#E67E22;">🚌 Melhor Tarifa (Ida)</div>
+                        <div class="info-text"><b>Viação:</b> {v['company']['name']}</div>
+                        <div class="info-text"><b>Horário:</b> {v['departure']['time'][:5]} ➝ {v['arrival']['time'][:5]}</div>
+                        <div class="info-text"><b>Classe:</b> {v['serviceClass']}</div>
+                        <div class="price-big">R$ {v['price']:.2f}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                else:
+                    # Fallback (Cálculo KM) se API falhar ou não tiver rota
+                    valor_estimado = km_dist * 0.50
+                    aviso = api_res['msg']
+                    st.markdown(f"""
+                    <div class="result-card" style="border-left: 5px solid #ccc;">
+                        <div class="card-title">🚌 Estimativa (KM)</div>
+                        <div class="info-text" style="color:red;">API: {aviso}</div>
+                        <div class="info-text">Distância: {km_dist:.0f} km</div>
+                        <div class="price-big" style="color:#666;">R$ {valor_estimado:.2f}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+        # --- B. HOSPEDAGEM ---
+        if menu in ["Hospedagem", "Cotação Geral"]:
+            local_exibicao = res_col2 if menu == "Cotação Geral" else st.container()
+            with local_exibicao:
+                dias = calcular_dias(data_ida, data_volta) + 1
+                
+                # Tenta extrair UF
+                uf = "BR"
+                for estado in TABELA_HOSPEDAGEM:
+                    if estado in destino.upper():
+                        uf = estado
+                        break
+                
+                valor_diaria = TABELA_HOSPEDAGEM.get(uf, 300)
+                total_hosp = valor_diaria * dias
+                
+                st.markdown(f"""
+                <div class="result-card">
+                    <div class="card-title" style="color:#27AE60;">🏨 Hospedagem ({uf})</div>
+                    <div class="info-text"><b>Período:</b> {dias} dia(s)</div>
+                    <div class="info-text"><b>Diária Média:</b> R$ {valor_diaria:.2f}</div>
+                    <div class="price-big">R$ {total_hosp:.2f}</div>
+                </div>
+                """, unsafe_allow_html=True)
+
+        # --- C. VEÍCULO ---
+        if menu in ["Veículo", "Cotação Geral"]:
+            local_exibicao = res_col3 if menu == "Cotação Geral" else st.container()
+            with local_exibicao:
+                dias = calcular_dias(data_ida, data_volta)
+                is_auto = "EA" in (grupo_carro or "")
+                
+                diaria = 203.44 if is_auto else 151.92
+                consumo = 9 if is_auto else 13
+                
+                total_locacao = diaria * dias
+                
+                # Combustível (Ida e Volta)
+                litros = (km_dist * 2) / consumo
+                custo_comb = litros * 5.80
+                total_carro = total_locacao + custo_comb
+                
+                aviso_km = "" if km_dist > 0 else "(Distância não calculada)"
+
+                st.markdown(f"""
+                <div class="result-card">
+                    <div class="card-title" style="color:#2980B9;">🚗 Veículo + Comb.</div>
+                    <div class="info-text"><b>Grupo:</b> {'Automático' if is_auto else 'Econômico'}</div>
+                    <div class="info-text"><b>Locação ({dias}d):</b> R$ {total_locacao:.2f}</div>
+                    <div class="info-text"><b>Combustível:</b> R$ {custo_comb:.2f} <small>{aviso_km}</small></div>
+                    <div class="price-big">R$ {total_carro:.2f}</div>
+                </div>
+                """, unsafe_allow_html=True)
 
 # =========================================================
-# BLOCO DE SOLICITAÇÃO — SEÇÃO ESPECIAL
+# 6. LINKS DE SOLICITAÇÃO (RODAPÉ)
 # =========================================================
-st.markdown("---")
-st.markdown("### 📌 Selecionar solicitação:")
+st.markdown("### 📌 Próximos Passos")
+st.write("Selecione o serviço para abrir o formulário de solicitação oficial:")
 
-opcao = st.selectbox(
-    "",
-    ["-- Selecionar --", "Passagem Rodoviária", "Hospedagem", "Veículo", "Hospedagem + Veículo"]
-)
+col_a, col_b, col_c = st.columns(3)
 
-# Botão estilizado
-if st.button("📤 Abrir Solicitação"):
-    if opcao == "-- Selecionar --":
-        st.warning("Selecione uma opção.")
-    elif opcao == "Passagem Rodoviária":
-        st.markdown("[Abrir Formulário](https://portalmse.com.br/index.php)")
-    elif opcao == "Veículo":
-        st.markdown("[Abrir Formulário de Veículo](https://docs.google.com/forms/d/e/1FAIpQLSc-ImW1hPShhR0dUT2z77rRN0PJtPw93Pz6EBMkybPJW9r8eg/viewform)")
-    elif opcao == "Hospedagem":
-        st.markdown("[Abrir Formulário de Hospedagem](https://docs.google.com/forms/d/e/1FAIpQLSc7K3xq-fa_Hsw1yLel5pKILUVMM5kzhHbNRPDISGFke6aJ4A/viewform)")
-    elif opcao == "Hospedagem + Veículo":
-        st.markdown("[Solicitar Hospedagem](https://docs.google.com/forms/d/e/1FAIpQLSc7K3xq-fa_Hsw1yLel5pKILUVMM5kzhHbNRPDISGFke6aJ4A/viewform)")
-        st.markdown("[Solicitar Veículo](https://docs.google.com/forms/d/e/1FAIpQLSc-ImW1hPShhR0dUT2z77rRN0PJtPw93Pz6EBMkybPJW9r8eg/viewform)")
+with col_a:
+    st.link_button("🚌 Solicitar Passagem (Portal MSE)", "https://portalmse.com.br/index.php", use_container_width=True)
 
+with col_b:
+    st.link_button("🚗 Solicitar Veículo (Forms)", "https://docs.google.com/forms/d/e/1FAIpQLSc-ImW1hPShhR0dUT2z77rRN0PJtPw93Pz6EBMkybPJW9r8eg/viewform", use_container_width=True)
+
+with col_c:
+    st.link_button("🏨 Solicitar Hospedagem (Forms)", "https://docs.google.com/forms/d/e/1FAIpQLSc7K3xq-fa_Hsw1yLel5pKILUVMM5kzhHbNRPDISGFke6aJ4A/viewform", use_container_width=True)
