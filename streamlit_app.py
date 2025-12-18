@@ -26,23 +26,24 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # =========================================================
-# 2. DADOS E CHAVES (FIXOS IGUAL AO SCRIPT)
+# 2. SEGURANÇA E DADOS
 # =========================================================
 
-# SUA CHAVE REAL (A mesma do Script GS)
-MAPS_KEY = "AIzaSyA6B_wPkGZ0-jMoKxahLLpwhWFiyLdmxFk"
+# Busca a chave nos segredos. Se não achar, avisa.
+try:
+    MAPS_KEY = st.secrets["MAPS_KEY"]
+    # Se tiver user/pass da QP no futuro, pegue aqui também
+    QP_USER = st.secrets.get("QP_USER", "mse")
+    QP_PASS = st.secrets.get("QP_PASS", "")
+except FileNotFoundError:
+    st.error("⚠️ Arquivo de segredos (.streamlit/secrets.toml) não encontrado!")
+    st.stop()
+except KeyError:
+    st.error("⚠️ Chave 'MAPS_KEY' não configurada nos segredos!")
+    st.stop()
 
-# Configuração Quero Passagem
 QP_URL = "https://queropassagem.qpdevs.com/ws_v4"
 AFFILIATE = "MSE"
-
-# Tenta pegar segredos ou usa padrão se falhar
-try:
-    QP_USER = st.secrets.get("QP_USER", "mse")
-    QP_PASS = st.secrets.get("QP_PASS", "") 
-except:
-    QP_USER = "mse"
-    QP_PASS = ""
 
 DE_PARA_QP = {
     "sao paulo": "ROD_1", "são paulo": "ROD_1", "sp": "ROD_1",
@@ -58,26 +59,25 @@ TABELA_HOSPEDAGEM = {
 }
 
 # =========================================================
-# 3. INTEGRAÇÕES (CORRIGIDO PARA IGUALAR AO SCRIPT)
+# 3. INTEGRAÇÕES
 # =========================================================
 
 def get_km_google(origem, destino):
-    """Calcula KM igual ao Google Apps Script"""
+    """Calcula KM via API Google Maps (Segura)"""
     if not MAPS_KEY: return 0
     
-    # Tratamento simples igual ao do Script
     orig_fmt = origem.strip()
     if "-" not in orig_fmt and "Brasil" not in orig_fmt: orig_fmt += ", Brasil"
     
     dest_fmt = destino.strip()
     if "-" not in dest_fmt and "Brasil" not in dest_fmt: dest_fmt += ", Brasil"
 
-    # URL Direta
     url = "https://maps.googleapis.com/maps/api/distancematrix/json"
     params = {
         "origins": orig_fmt,
         "destinations": dest_fmt,
         "units": "metric",
+        "mode": "driving",
         "key": MAPS_KEY
     }
     
@@ -85,9 +85,8 @@ def get_km_google(origem, destino):
         r = requests.get(url, params=params)
         data = r.json()
         
-        # DEBUG: Se der erro, mostra no console do Streamlit o motivo
         if data.get('status') != 'OK':
-            print(f"Erro Geral API Maps: {data}")
+            print(f"Erro API: {data.get('status')}")
             return 0
             
         rows = data.get('rows', [])
@@ -96,14 +95,12 @@ def get_km_google(origem, destino):
         element = rows[0].get('elements', [])[0]
         
         if element.get('status') == 'OK':
-            metros = element['distance']['value']
-            return metros / 1000.0
+            return element['distance']['value'] / 1000.0
         else:
-            print(f"Erro Rota Maps: {element.get('status')}")
             return 0
             
     except Exception as e:
-        print(f"Erro Técnico Maps: {e}")
+        print(f"Erro request: {e}")
         return 0
 
 def buscar_passagem_api(origem, destino, data_iso):
@@ -117,7 +114,9 @@ def buscar_passagem_api(origem, destino, data_iso):
     body = {"from": id_origem, "to": id_destino, "travelDate": data_iso, "affiliateCode": AFFILIATE}
 
     try:
+        # Passando User/Pass vazios se não tiver secrets da QP, mas a estrutura está pronta
         r = requests.post(endpoint, json=body, auth=(QP_USER, QP_PASS))
+        
         if r.status_code == 200:
             res = r.json()
             lista = res[0] if (isinstance(res, list) and len(res) > 0 and isinstance(res[0], list)) else res
@@ -142,7 +141,7 @@ with st.sidebar:
     try:
         st.image("LOGO MSE.png", width=160)
     except:
-        st.warning("Sem Logo")
+        st.warning("Logo não encontrado")
     
     st.markdown("### MSE TRAVEL EXPRESS")
     st.markdown("---")
@@ -171,12 +170,10 @@ if btn_calcular:
     if not origem or not destino:
         st.error("Preencha Origem e Destino.")
     else:
-        # CHAMADA DO MAPS COM CHAVE FIXA
         km_dist = get_km_google(origem, destino)
         
-        # Debug Visual para confirmar que calculou
         if km_dist == 0:
-            st.warning("⚠️ Atenção: Não foi possível calcular a distância exata. Verifique os nomes das cidades.")
+            st.warning("⚠️ Distância não calculada. Verifique nomes ou chave de API.")
         
         c1, c2, c3 = st.columns(3)
 
@@ -199,7 +196,6 @@ if btn_calcular:
                     <div class="result-card" style="border-left: 5px solid gray;">
                         <div class="card-title">🚌 Estimativa KM</div>
                         <div class="info-text" style="color:red;">{api_res['msg']}</div>
-                        <div class="info-text">Distância: {km_dist:.1f} km</div>
                         <div class="price-big" style="color:#666;">R$ {est:.2f}</div>
                     </div>""", unsafe_allow_html=True)
 
@@ -223,11 +219,8 @@ if btn_calcular:
                 is_auto = "EA" in (grupo_carro or "")
                 diaria = 203.44 if is_auto else 151.92
                 consumo = 9 if is_auto else 13
-                
-                # CÁLCULO DIRETO COM O KM OBTIDO
                 comb = ((km_dist * 2) / consumo) * 5.80
                 total = (diaria * dias) + comb
-                
                 st.markdown(f"""
                 <div class="result-card">
                     <div class="card-title" style="color:#2980B9;">🚗 Carro + Comb.</div>
