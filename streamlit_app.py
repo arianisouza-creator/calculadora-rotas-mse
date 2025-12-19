@@ -12,43 +12,19 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# CSS COMBINADO: Visual Corporativo + Esconder TUDO do Streamlit (Barras, Menus, Rodapés)
+# CSS COMBINADO: Esconder TUDO do Streamlit para parecer Site Oficial
 st.markdown("""
 <style>
-    /* --- ESCONDER ELEMENTOS PADRÃO DO STREAMLIT --- */
-    
-    /* Esconde o menu de hambúrguer (três riscos) no topo */
+    /* Esconder menus e rodapés do Streamlit */
     #MainMenu {visibility: hidden;}
-    
-    /* Esconde o rodapé padrão (onde ficam os ícones de coroa e 'Made with Streamlit') */
     footer {visibility: hidden;}
-    
-    /* Esconde a barra colorida no topo da tela */
     header {visibility: hidden;}
-    
-    /* Esconde especificamente o botão 'Gerenciar Aplicativo' / 'Deploy' */
-    .stDeployButton {
-        display: none;
-        visibility: hidden;
-    }
-    
-    /* Esconde a barra de ferramentas inferior (os botões coloridos que você mandou na foto) */
-    [data-testid="stToolbar"] {
-        visibility: hidden;
-        height: 0%;
-    }
-    
-    /* Remove a decoração padrão do Streamlit */
-    [data-testid="stDecoration"] {
-        display: none;
-    }
+    .stDeployButton {display: none; visibility: hidden;}
+    [data-testid="stToolbar"] {visibility: hidden; height: 0%;}
+    [data-testid="stDecoration"] {display: none;}
+    .block-container {padding-top: 2rem;}
 
-    /* Ajustar o topo para subir o conteúdo (já que tiramos a barra) */
-    .block-container {
-        padding-top: 2rem;
-    }
-
-    /* --- ESTILO CORPORATIVO MSE --- */
+    /* Estilo Corporativo */
     [data-testid="stSidebar"] { 
         background-color: #f4f4f4; 
         border-right: 1px solid #ddd; 
@@ -106,20 +82,21 @@ st.markdown("""
 # 2. SEGURANÇA E DADOS
 # =========================================================
 
-# Busca a chave nos segredos.
 try:
     MAPS_KEY = st.secrets["MAPS_KEY"]
     QP_USER = st.secrets.get("QP_USER", "mse")
     QP_PASS = st.secrets.get("QP_PASS", "")
 except FileNotFoundError:
-    st.error("⚠️ Arquivo de segredos (.streamlit/secrets.toml) não encontrado!")
+    st.error("⚠️ Arquivo de segredos não encontrado!")
     st.stop()
 except KeyError:
-    st.error("⚠️ Chave 'MAPS_KEY' não configurada nos segredos!")
+    st.error("⚠️ Chaves de API não configuradas!")
     st.stop()
 
-QP_URL = "https://queropassagem.qpdevs.com/ws_v4"
-AFFILIATE = "MSE"
+# --- ATENÇÃO: URL DE PRODUÇÃO AGORA! ---
+QP_URL = "https://queropassagem.com.br/ws_v4"
+# O AffiliateCode ainda será enviado pela Mariana, mantenha MSE por enquanto ou aguarde
+AFFILIATE = "MSE" 
 
 DE_PARA_QP = {
     "sao paulo": "ROD_1", "são paulo": "ROD_1", "sp": "ROD_1",
@@ -139,58 +116,35 @@ TABELA_HOSPEDAGEM = {
 # =========================================================
 
 def get_km_google(origem, destino):
-    """Calcula KM via API Google Maps (Segura)"""
+    """Calcula KM via API Google Maps"""
     if not MAPS_KEY: return 0
-    
-    orig_fmt = origem.strip()
-    if "-" not in orig_fmt and "Brasil" not in orig_fmt: orig_fmt += ", Brasil"
-    
-    dest_fmt = destino.strip()
-    if "-" not in dest_fmt and "Brasil" not in dest_fmt: dest_fmt += ", Brasil"
+    orig_fmt = origem.strip() + (", Brasil" if "Brasil" not in origem else "")
+    dest_fmt = destino.strip() + (", Brasil" if "Brasil" not in destino else "")
 
     url = "https://maps.googleapis.com/maps/api/distancematrix/json"
-    params = {
-        "origins": orig_fmt,
-        "destinations": dest_fmt,
-        "units": "metric",
-        "mode": "driving",
-        "key": MAPS_KEY
-    }
+    params = {"origins": orig_fmt, "destinations": dest_fmt, "units": "metric", "mode": "driving", "key": MAPS_KEY}
     
     try:
         r = requests.get(url, params=params)
         data = r.json()
-        
-        if data.get('status') != 'OK':
-            return 0
-            
-        rows = data.get('rows', [])
-        if not rows: return 0
-        
-        element = rows[0].get('elements', [])[0]
-        
-        if element.get('status') == 'OK':
-            return element['distance']['value'] / 1000.0
-        else:
-            return 0
-            
-    except Exception as e:
-        print(f"Erro request: {e}")
-        return 0
+        if data.get('status') == 'OK':
+            elem = data['rows'][0]['elements'][0]
+            if elem.get('status') == 'OK':
+                return elem['distance']['value'] / 1000.0
+    except:
+        pass
+    return 0
 
 def buscar_passagem_api(origem, destino, data_iso):
     id_origem = DE_PARA_QP.get(origem.lower().strip())
     id_destino = DE_PARA_QP.get(destino.lower().strip())
-
-    if not id_origem or not id_destino:
-        return {"erro": True, "msg": "Cidade não mapeada."}
+    if not id_origem or not id_destino: return {"erro": True, "msg": "Cidade não mapeada."}
 
     endpoint = f"{QP_URL}/new/search"
     body = {"from": id_origem, "to": id_destino, "travelDate": data_iso, "affiliateCode": AFFILIATE}
 
     try:
         r = requests.post(endpoint, json=body, auth=(QP_USER, QP_PASS))
-        
         if r.status_code == 200:
             res = r.json()
             lista = res[0] if (isinstance(res, list) and len(res) > 0 and isinstance(res[0], list)) else res
@@ -198,6 +152,8 @@ def buscar_passagem_api(origem, destino, data_iso):
             if not disponiveis: return {"erro": True, "msg": "Sem viagens."}
             disponiveis.sort(key=lambda x: x['price'])
             return {"erro": False, "dados": disponiveis[0]}
+        else:
+            return {"erro": True, "msg": f"Status API: {r.status_code}"}
     except Exception as e:
         return {"erro": True, "msg": f"Erro API: {str(e)}"}
     return {"erro": True, "msg": "Erro desconhecido."}
@@ -215,9 +171,7 @@ with st.sidebar:
     try:
         st.image("LOGO MSE.png", width=160)
     except:
-        # Se não achar a imagem, mostra um aviso discreto ou nada
         st.markdown("### MSE TRAVEL")
-    
     st.markdown("---")
     menu = st.radio("Navegação", ["Cotação Geral", "Rodoviário", "Veículo", "Hospedagem"])
 
@@ -245,16 +199,17 @@ if btn_calcular:
         st.error("Preencha Origem e Destino.")
     else:
         km_dist = get_km_google(origem, destino)
-        
         if km_dist == 0:
-            st.warning("⚠️ Distância não calculada automaticamente. Verifique se a cidade existe ou insira o Estado.")
+            st.warning("⚠️ Distância não calculada automaticamente.")
         
         c1, c2, c3 = st.columns(3)
 
         # RODOVIÁRIO
         if menu in ["Rodoviário", "Cotação Geral"]:
             with (c1 if menu == "Cotação Geral" else st.container()):
+                # Chama a API de Produção
                 api_res = buscar_passagem_api(origem, destino, str(data_ida))
+                
                 if not api_res['erro']:
                     v = api_res['dados']
                     st.markdown(f"""
@@ -269,7 +224,7 @@ if btn_calcular:
                     st.markdown(f"""
                     <div class="result-card" style="border-left: 5px solid gray;">
                         <div class="card-title">🚌 Estimativa KM</div>
-                        <div class="info-text" style="color:red;">{api_res['msg']}</div>
+                        <div class="info-text" style="color:red;">Não foi possível cotar online.</div>
                         <div class="price-big" style="color:#666;">R$ {est:.2f}</div>
                     </div>""", unsafe_allow_html=True)
 
@@ -309,5 +264,6 @@ ca, cb, cc = st.columns(3)
 with ca: st.link_button("🚌 Solicitar Passagem", "https://portalmse.com.br/index.php", use_container_width=True)
 with cb: st.link_button("🚗 Solicitar Veículo", "https://docs.google.com/forms/d/e/1FAIpQLSc-ImW1hPShhR0dUT2z77rRN0PJtPw93Pz6EBMkybPJW9r8eg/viewform", use_container_width=True)
 with cc: st.link_button("🏨 Solicitar Hotel", "https://docs.google.com/forms/d/e/1FAIpQLSc7K3xq-fa_Hsw1yLel5pKILUVMM5kzhHbNRPDISGFke6aJ4A/viewform", use_container_width=True)
+
 
 
