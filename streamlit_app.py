@@ -3,7 +3,7 @@ import requests
 from datetime import date, timedelta
 
 # =========================================================
-# 1. CONFIGURAÇÃO VISUAL E REMOÇÃO DE BARRA SUPERIOR
+# 1. CONFIGURAÇÃO VISUAL
 # =========================================================
 st.set_page_config(
     page_title="Portal MSE Travel",
@@ -12,10 +12,9 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# CSS COMBINADO: Esconder TUDO do Streamlit para parecer Site Oficial
+# CSS: Visual Corporativo + Esconder elementos do Streamlit
 st.markdown("""
 <style>
-    /* Esconder menus e rodapés do Streamlit */
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
     header {visibility: hidden;}
@@ -24,7 +23,6 @@ st.markdown("""
     [data-testid="stDecoration"] {display: none;}
     .block-container {padding-top: 2rem;}
 
-    /* Estilo Corporativo */
     [data-testid="stSidebar"] { 
         background-color: #f4f4f4; 
         border-right: 1px solid #ddd; 
@@ -86,24 +84,22 @@ try:
     MAPS_KEY = st.secrets["MAPS_KEY"]
     QP_USER = st.secrets.get("QP_USER", "mse")
     QP_PASS = st.secrets.get("QP_PASS", "")
-except FileNotFoundError:
-    st.error("⚠️ Arquivo de segredos não encontrado!")
-    st.stop()
-except KeyError:
-    st.error("⚠️ Chaves de API não configuradas!")
+except:
+    st.error("⚠️ Configure as chaves no .streamlit/secrets.toml")
     st.stop()
 
-# --- ATENÇÃO: URL DE PRODUÇÃO AGORA! ---
+# --- URL DE PRODUÇÃO (OFICIAL) ---
 QP_URL = "https://queropassagem.com.br/ws_v4"
-# O AffiliateCode ainda será enviado pela Mariana, mantenha MSE por enquanto ou aguarde
 AFFILIATE = "MSE" 
 
+# LISTA MANUAL DE CIDADES (Enquanto não puxamos automático)
+# O Gabriel passou o endpoint para puxarmos isso automático depois.
 DE_PARA_QP = {
     "sao paulo": "ROD_1", "são paulo": "ROD_1", "sp": "ROD_1",
     "rio de janeiro": "ROD_55", "rio": "ROD_55", "rj": "ROD_55",
     "curitiba": "ROD_3", "belo horizonte": "ROD_7", "bh": "ROD_7",
     "londrina": "ROD_23", "florianopolis": "ROD_6", "brasilia": "ROD_2",
-    "campinas": "ROD_13", "santos": "ROD_10"
+    "campinas": "ROD_13", "santos": "ROD_10", "maringa": "ROD_16", "foz do iguacu": "ROD_17"
 }
 
 TABELA_HOSPEDAGEM = { 
@@ -116,16 +112,12 @@ TABELA_HOSPEDAGEM = {
 # =========================================================
 
 def get_km_google(origem, destino):
-    """Calcula KM via API Google Maps"""
     if not MAPS_KEY: return 0
     orig_fmt = origem.strip() + (", Brasil" if "Brasil" not in origem else "")
     dest_fmt = destino.strip() + (", Brasil" if "Brasil" not in destino else "")
-
     url = "https://maps.googleapis.com/maps/api/distancematrix/json"
-    params = {"origins": orig_fmt, "destinations": dest_fmt, "units": "metric", "mode": "driving", "key": MAPS_KEY}
-    
     try:
-        r = requests.get(url, params=params)
+        r = requests.get(url, params={"origins": orig_fmt, "destinations": dest_fmt, "units": "metric", "mode": "driving", "key": MAPS_KEY})
         data = r.json()
         if data.get('status') == 'OK':
             elem = data['rows'][0]['elements'][0]
@@ -138,25 +130,31 @@ def get_km_google(origem, destino):
 def buscar_passagem_api(origem, destino, data_iso):
     id_origem = DE_PARA_QP.get(origem.lower().strip())
     id_destino = DE_PARA_QP.get(destino.lower().strip())
-    if not id_origem or not id_destino: return {"erro": True, "msg": "Cidade não mapeada."}
+    
+    if not id_origem or not id_destino:
+        return {"erro": True, "msg": "Cidade não mapeada na base simplificada."}
 
     endpoint = f"{QP_URL}/new/search"
     body = {"from": id_origem, "to": id_destino, "travelDate": data_iso, "affiliateCode": AFFILIATE}
 
     try:
+        # Tenta conectar. Se o IP estiver liberado, vai funcionar!
         r = requests.post(endpoint, json=body, auth=(QP_USER, QP_PASS))
+        
         if r.status_code == 200:
             res = r.json()
             lista = res[0] if (isinstance(res, list) and len(res) > 0 and isinstance(res[0], list)) else res
             disponiveis = [v for v in lista if v.get('availableSeats', 0) > 0]
-            if not disponiveis: return {"erro": True, "msg": "Sem viagens."}
+            
+            if not disponiveis: return {"erro": True, "msg": "Sem viagens disponíveis nesta data."}
+            
             disponiveis.sort(key=lambda x: x['price'])
             return {"erro": False, "dados": disponiveis[0]}
         else:
-            return {"erro": True, "msg": f"Status API: {r.status_code}"}
+            return {"erro": True, "msg": f"Erro API ({r.status_code}): IP Bloqueado ou Senha Inválida."}
+            
     except Exception as e:
-        return {"erro": True, "msg": f"Erro API: {str(e)}"}
-    return {"erro": True, "msg": "Erro desconhecido."}
+        return {"erro": True, "msg": f"Erro de Conexão: {str(e)}"}
 
 def calcular_dias(ida, volta):
     if not ida or not volta: return 1
@@ -199,15 +197,14 @@ if btn_calcular:
         st.error("Preencha Origem e Destino.")
     else:
         km_dist = get_km_google(origem, destino)
-        if km_dist == 0:
-            st.warning("⚠️ Distância não calculada automaticamente.")
+        if km_dist == 0: st.warning("⚠️ Distância não calculada automaticamente.")
         
         c1, c2, c3 = st.columns(3)
 
         # RODOVIÁRIO
         if menu in ["Rodoviário", "Cotação Geral"]:
             with (c1 if menu == "Cotação Geral" else st.container()):
-                # Chama a API de Produção
+                # Chama a API
                 api_res = buscar_passagem_api(origem, destino, str(data_ida))
                 
                 if not api_res['erro']:
@@ -221,10 +218,11 @@ if btn_calcular:
                     </div>""", unsafe_allow_html=True)
                 else:
                     est = km_dist * 0.50
+                    msg_erro = api_res['msg']
                     st.markdown(f"""
                     <div class="result-card" style="border-left: 5px solid gray;">
                         <div class="card-title">🚌 Estimativa KM</div>
-                        <div class="info-text" style="color:red;">Não foi possível cotar online.</div>
+                        <div class="info-text" style="color:red;">{msg_erro}</div>
                         <div class="price-big" style="color:#666;">R$ {est:.2f}</div>
                     </div>""", unsafe_allow_html=True)
 
@@ -264,6 +262,7 @@ ca, cb, cc = st.columns(3)
 with ca: st.link_button("🚌 Solicitar Passagem", "https://portalmse.com.br/index.php", use_container_width=True)
 with cb: st.link_button("🚗 Solicitar Veículo", "https://docs.google.com/forms/d/e/1FAIpQLSc-ImW1hPShhR0dUT2z77rRN0PJtPw93Pz6EBMkybPJW9r8eg/viewform", use_container_width=True)
 with cc: st.link_button("🏨 Solicitar Hotel", "https://docs.google.com/forms/d/e/1FAIpQLSc7K3xq-fa_Hsw1yLel5pKILUVMM5kzhHbNRPDISGFke6aJ4A/viewform", use_container_width=True)
+
 
 
 
