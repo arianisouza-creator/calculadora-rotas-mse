@@ -13,7 +13,6 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# CSS: Visual Corporativo
 st.markdown("""
 <style>
     #MainMenu {visibility: hidden;}
@@ -21,52 +20,11 @@ st.markdown("""
     header {visibility: hidden;}
     .block-container {padding-top: 2rem;}
     [data-testid="stSidebar"] { background-color: #f4f4f4; border-right: 1px solid #ddd; }
-    
     h1, h2, h3 { color: #8B0000; }
-    
-    .stButton>button { 
-        background-color: #8B0000; 
-        color: white; 
-        border-radius: 8px; 
-        font-weight: bold; 
-        border: none; 
-        width: 100%; 
-        padding: 10px; 
-        transition: 0.3s; 
-    }
-    .stButton>button:hover { 
-        background-color: #600000; 
-        color: white; 
-    }
-    
-    .result-card { 
-        background-color: white; 
-        padding: 20px; 
-        border-radius: 10px; 
-        box-shadow: 0 4px 6px rgba(0,0,0,0.1); 
-        border-left: 5px solid #8B0000; 
-        margin-bottom: 20px; 
-    }
-    
-    .card-title { 
-        font-weight: bold; 
-        font-size: 1.1em; 
-        color: #555; 
-        margin-bottom: 10px; 
-        text-transform: uppercase; 
-    }
-    
-    .price-big { 
-        font-size: 1.8em; 
-        font-weight: 800; 
-        color: #2E7D32; 
-    }
-    
-    .info-text { 
-        color: #666; 
-        font-size: 0.9em; 
-        margin-bottom: 5px; 
-    }
+    .stButton>button { background-color: #8B0000; color: white; border-radius: 8px; font-weight: bold; width: 100%; padding: 10px; }
+    .result-card { background-color: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); border-left: 5px solid #8B0000; margin-bottom: 20px; }
+    .price-big { font-size: 1.8em; font-weight: 800; color: #2E7D32; }
+    .info-text { color: #666; font-size: 0.9em; margin-bottom: 5px; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -86,16 +44,19 @@ except:
 QP_URL = "https://queropassagem.com.br/ws_v4"
 AFFILIATE = "MSE" 
 
-# --- LISTA DE CIDADES (Atualize aqui os IDs corretos) ---
+# --- LISTA DE CIDADES (Atualizada com o ID que você descobriu) ---
 DE_PARA_QP = {
+    # São Paulo (Capital) - Geralmente Tietê (ROD_1) recebe ônibus do PR
     "sao paulo": "ROD_1", "são paulo": "ROD_1", "sp": "ROD_1",
+    "barra funda": "ROD_1", # Redirecionando Barra Funda para Tietê por enquanto (evitar erro do RS)
+    
     "rio de janeiro": "ROD_55", "rio": "ROD_55", "rj": "ROD_55",
     "curitiba": "ROD_3", "belo horizonte": "ROD_7", "bh": "ROD_7",
     "florianopolis": "ROD_6", "brasilia": "ROD_2",
     "campinas": "ROD_13", "santos": "ROD_10", "maringa": "ROD_16", "foz do iguacu": "ROD_17",
     
-    # IMPORTANTE: Use a aba 'Descobrir IDs' para achar o ID exato da rodoviária (ROD_...)
-    # O ID 'ROD_CIT_830' é da cidade inteira e pode causar erro 400 na busca.
+    # --- CORREÇÃO CONFIRMADA ---
+    # Terminal Rodoviário de Londrina (José Garcia Villar)
     "londrina": "ROD_837" 
 }
 
@@ -109,7 +70,6 @@ TABELA_HOSPEDAGEM = {
 # =========================================================
 
 def get_auth_headers():
-    """Gera headers manuais para contornar erro 403 e enviar autenticação correta"""
     auth_str = f"{QP_USER.strip()}:{QP_PASS.strip()}"
     auth_bytes = auth_str.encode('utf-8')
     auth_base64 = base64.b64encode(auth_bytes).decode('utf-8')
@@ -123,42 +83,32 @@ def get_auth_headers():
     }
 
 def buscar_id_cidade_avancado(termo):
-    """
-    Busca avançada que verifica 'substops' para encontrar a Rodoviária (ROD_)
-    dentro da Cidade (CIT_). Essencial para corrigir erros de busca.
-   
-    """
+    """Busca avançada para encontrar IDs de Rodoviárias (substops)"""
     endpoint = f"{QP_URL}/stops"
     try:
         r = requests.get(endpoint, headers=get_auth_headers())
         if r.status_code == 200:
             tudo = r.json()
             resultados = []
-            
             for item in tudo:
                 nome_item = item.get('name', '').lower()
-                
-                # Se encontrou o nome buscado
                 if termo.lower() in nome_item:
-                    # Verifica se existem sub-paradas (Rodoviárias reais)
                     substops = item.get('substops', [])
                     if substops:
                         for sub in substops:
                             resultados.append({
                                 "tipo": "RODOVIÁRIA (Use este!)",
                                 "nome": sub.get('name'),
-                                "id": sub.get('id'), # ID do tipo ROD_...
+                                "id": sub.get('id'),
                                 "url": sub.get('url')
                             })
                     else:
-                        # Parada única
                         resultados.append({
                             "tipo": "Parada Simples",
                             "nome": item.get('name'),
                             "id": item.get('id'),
                             "url": item.get('url')
                         })
-            
             return resultados
         else:
             return {"erro": True, "msg": f"Erro Status {r.status_code}"}
@@ -185,12 +135,15 @@ def buscar_passagem_api(origem, destino, data_iso):
     id_origem = DE_PARA_QP.get(origem.lower().strip())
     id_destino = DE_PARA_QP.get(destino.lower().strip())
     
-    if not id_origem or not id_destino:
-        return {"erro": True, "msg": "Cidade não mapeada. Use a aba 'Descobrir IDs' para achar o código correto."}
+    # Se não achar na lista simples, tenta buscar dinamicamente (fallback)
+    if not id_origem:
+        # Lógica simples de fallback: se não está no dicionário, avisa para usar a ferramenta
+        return {"erro": True, "msg": f"Cidade '{origem}' não mapeada. Use a aba 'Descobrir IDs'."}
+    if not id_destino:
+        return {"erro": True, "msg": f"Cidade '{destino}' não mapeada. Use a aba 'Descobrir IDs'."}
 
     endpoint = f"{QP_URL}/new/search"
     
-    # Payload conforme documentação
     body = {
         "from": id_origem, 
         "to": id_destino, 
@@ -205,16 +158,12 @@ def buscar_passagem_api(origem, destino, data_iso):
             res = r.json()
             if not res: return {"erro": True, "msg": "Nenhuma viagem encontrada (Lista Vazia)."}
             
-            # API pode retornar lista de listas [[{...}]] ou lista simples [{...}]
             lista = res[0] if (isinstance(res, list) and len(res) > 0 and isinstance(res[0], list)) else res
             
-            # Filtra assentos disponíveis
             disponiveis = [v for v in lista if v.get('availableSeats', 0) > 0]
-            
             if not disponiveis: return {"erro": True, "msg": "Sem assentos disponíveis nesta data."}
             
-            # --- CORREÇÃO DE PREÇO (IMPORTANTE) ---
-            # A API retorna o preço como objeto: {'price': 22.4, 'tax': ...} ou direto float.
+            # Tratamento de preço (Objeto ou Float)
             def get_price_value(item):
                 p = item.get('price')
                 if isinstance(p, dict):
@@ -225,8 +174,7 @@ def buscar_passagem_api(origem, destino, data_iso):
             return {"erro": False, "dados": disponiveis[0]}
         
         else:
-            msg_erro = r.text
-            return {"erro": True, "msg": f"Erro API ({r.status_code}): {msg_erro[:200]}"}
+            return {"erro": True, "msg": f"Erro API ({r.status_code}): {r.text[:200]}"}
             
     except Exception as e:
         return {"erro": True, "msg": f"Erro Conexão: {str(e)}"}
@@ -250,7 +198,7 @@ with st.sidebar:
 
 st.title(f"📊 {menu}")
 
-# --- ABA DE DESCOBERTA (Ferramenta Essencial) ---
+# --- ABA DE DESCOBERTA ---
 if menu == "🕵️ Descobrir IDs":
     st.markdown("### 🔎 Descobridor de Rodoviárias")
     st.info("Digite o nome da cidade para encontrar a RODOVIÁRIA (ID ROD_) correta.")
@@ -263,16 +211,14 @@ if menu == "🕵️ Descobrir IDs":
             if isinstance(res, list) and res:
                 st.success(f"{len(res)} locais encontrados:")
                 for c in res:
-                    # Destaque visual para o ID correto
                     cor = "green" if "RODOVIÁRIA" in c['tipo'] else "black"
                     icone = "✅" if "RODOVIÁRIA" in c['tipo'] else "📍"
-                    
                     st.markdown(f"**:{cor}[{icone} {c['tipo']}]**")
                     st.write(f"{c['nome']}")
                     st.code(f'"{c["nome"].lower()}": "{c["id"]}"', language="python")
                     st.markdown("---")
             else:
-                st.warning("Nada encontrado. Tente buscar por parte do nome (ex: 'Terminal').")
+                st.warning("Nada encontrado.")
 
 # --- ABAS DE COTAÇÃO ---
 else:
@@ -306,12 +252,10 @@ else:
                     if not api_res['erro']:
                         v = api_res['dados']
                         
-                        # Extração segura dos dados
                         comp = v.get('company', {}).get('name', 'Viação')
                         saida = v.get('departure', {}).get('time', '00:00')[:5]
                         chegada = v.get('arrival', {}).get('time', '00:00')[:5]
                         
-                        # Preço seguro
                         p_raw = v.get('price')
                         preco = float(p_raw.get('price')) if isinstance(p_raw, dict) else float(p_raw or 0)
                         
@@ -347,7 +291,6 @@ else:
             # CARRO
             with c3:
                 if menu in ["Veículo", "Cotação Geral"]:
-                     # Recálculo simples para visualização
                      dias_carro = calcular_dias(data_ida, data_volta)
                      is_auto = "EA" in (grupo_carro or "")
                      diaria = 203.44 if is_auto else 151.92
@@ -362,4 +305,3 @@ else:
                         <div class="info-text"><b>Locação:</b> R$ {(diaria*dias_carro):.2f}</div>
                         <div class="price-big">R$ {total_carro:.2f}</div>
                      </div>""", unsafe_allow_html=True)
-
