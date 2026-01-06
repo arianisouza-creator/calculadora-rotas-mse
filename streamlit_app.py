@@ -1,5 +1,6 @@
 import streamlit as st
 import requests
+import base64
 from datetime import date, timedelta
 
 # =========================================================
@@ -92,7 +93,7 @@ except:
 QP_URL = "https://queropassagem.com.br/ws_v4"
 AFFILIATE = "MSE" 
 
-# LISTA MANUAL DE CIDADES (Simplificada para demo)
+# LISTA MANUAL DE CIDADES
 DE_PARA_QP = {
     "sao paulo": "ROD_1", "são paulo": "ROD_1", "sp": "ROD_1",
     "rio de janeiro": "ROD_55", "rio": "ROD_55", "rj": "ROD_55",
@@ -131,7 +132,7 @@ def buscar_passagem_api(origem, destino, data_iso):
     id_destino = DE_PARA_QP.get(destino.lower().strip())
     
     if not id_origem or not id_destino:
-        return {"erro": True, "msg": "Cidade não mapeada na base simplificada."}
+        return {"erro": True, "msg": "Cidade não mapeada na base simplificada (Verifique acentos)."}
 
     endpoint = f"{QP_URL}/new/search"
     
@@ -141,34 +142,39 @@ def buscar_passagem_api(origem, destino, data_iso):
         "travelDate": data_iso, 
         "affiliateCode": AFFILIATE
     }
-    
-    # --- CABEÇALHOS (HEADERS) PARA EVITAR ERRO 403 ---
-    # Isso faz o Python se "disfarçar" de Google Chrome
-    headers_fake = {
+
+    # --- CORREÇÃO TÉCNICA AVANÇADA ---
+    # 1. Cria a autenticação manualmente para evitar erro com caracteres especiais
+    auth_str = f"{QP_USER.strip()}:{QP_PASS.strip()}"
+    auth_bytes = auth_str.encode('utf-8')
+    auth_base64 = base64.b64encode(auth_bytes).decode('utf-8')
+
+    # 2. Cabeçalhos que simulam um Navegador Real (Evita erro 403)
+    headers_custom = {
+        "Authorization": f"Basic {auth_base64}",
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         "Accept": "application/json",
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
+        "Referer": "https://queropassagem.com.br/",
+        "Origin": "https://queropassagem.com.br"
     }
 
     try:
-        # Enviamos os headers junto com a autenticação
-        r = requests.post(endpoint, json=body, auth=(QP_USER, QP_PASS), headers=headers_fake)
+        # Envia a requisição SEM o parâmetro auth= (pois já está no header)
+        r = requests.post(endpoint, json=body, headers=headers_custom)
         
         if r.status_code == 200:
             res = r.json()
-            # Tratamento para quando a API retorna lista de listas
             lista = res[0] if (isinstance(res, list) and len(res) > 0 and isinstance(res[0], list)) else res
             
-            # Filtra apenas viagens com assentos disponíveis
             disponiveis = [v for v in lista if v.get('availableSeats', 0) > 0]
             
             if not disponiveis: return {"erro": True, "msg": "Sem viagens disponíveis nesta data."}
             
-            # Ordena pelo preço menor
             disponiveis.sort(key=lambda x: x['price'])
             return {"erro": False, "dados": disponiveis[0]}
         else:
-            return {"erro": True, "msg": f"Erro API ({r.status_code}): {r.text}"}
+            return {"erro": True, "msg": f"Erro API ({r.status_code}): {r.text[:200]}"}
             
     except Exception as e:
         return {"erro": True, "msg": f"Erro de Conexão: {str(e)}"}
@@ -279,6 +285,7 @@ ca, cb, cc = st.columns(3)
 with ca: st.link_button("🚌 Solicitar Passagem", "https://portalmse.com.br/index.php", use_container_width=True)
 with cb: st.link_button("🚗 Solicitar Veículo", "https://docs.google.com/forms/d/e/1FAIpQLSc-ImW1hPShhR0dUT2z77rRN0PJtPw93Pz6EBMkybPJW9r8eg/viewform", use_container_width=True)
 with cc: st.link_button("🏨 Solicitar Hotel", "https://docs.google.com/forms/d/e/1FAIpQLSc7K3xq-fa_Hsw1yLel5pKILUVMM5kzhHbNRPDISGFke6aJ4A/viewform", use_container_width=True)
+
 
 
 
