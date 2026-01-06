@@ -93,16 +93,17 @@ except:
 QP_URL = "https://queropassagem.com.br/ws_v4"
 AFFILIATE = "MSE" 
 
-# --- LISTA DE CIDADES (Atualize aqui com os IDs numéricos que descobrir) ---
+# --- LISTA DE CIDADES ATUALIZADA ---
 DE_PARA_QP = {
+    # Capitais e Grandes Centros (Geralmente mantêm IDs antigos)
     "sao paulo": "ROD_1", "são paulo": "ROD_1", "sp": "ROD_1",
     "rio de janeiro": "ROD_55", "rio": "ROD_55", "rj": "ROD_55",
     "curitiba": "ROD_3", "belo horizonte": "ROD_7", "bh": "ROD_7",
     "florianopolis": "ROD_6", "brasilia": "ROD_2",
     "campinas": "ROD_13", "santos": "ROD_10", "maringa": "ROD_16", "foz do iguacu": "ROD_17",
     
-    # IDs Provisórios (Use a ferramenta 'Descobrir IDs' para corrigir se der erro)
-    "londrina": "ROD_23" 
+    # --- CORREÇÃO FEITA AQUI ---
+    "londrina": "ROD_CIT_830"
 }
 
 TABELA_HOSPEDAGEM = { 
@@ -129,13 +130,12 @@ def get_auth_headers():
     }
 
 def buscar_id_cidade(termo):
-    """NOVA FUNÇÃO: Busca o ID correto da cidade na API"""
-    endpoint = f"{QP_URL}/stops" # Endpoint que lista todas as cidades
+    """Busca o ID correto da cidade na API"""
+    endpoint = f"{QP_URL}/stops"
     try:
         r = requests.get(endpoint, headers=get_auth_headers())
         if r.status_code == 200:
             cidades = r.json()
-            # Filtra cidades que contenham o termo digitado
             encontradas = [c for c in cidades if termo.lower() in c.get('name', '').lower()]
             return encontradas
         else:
@@ -164,7 +164,7 @@ def buscar_passagem_api(origem, destino, data_iso):
     id_destino = DE_PARA_QP.get(destino.lower().strip())
     
     if not id_origem or not id_destino:
-        return {"erro": True, "msg": f"Cidade não mapeada. Use a aba 'Descobrir IDs' para achar o código de {origem}/{destino}."}
+        return {"erro": True, "msg": f"Cidade não mapeada. Use a aba 'Descobrir IDs' para achar o código correto."}
 
     endpoint = f"{QP_URL}/new/search"
     
@@ -178,28 +178,28 @@ def buscar_passagem_api(origem, destino, data_iso):
     try:
         r = requests.post(endpoint, json=body, headers=get_auth_headers())
         
-        # MODO DEBUG SILENCIOSO
         if r.status_code == 200:
             res = r.json()
             
-            # Se vier vazio, é porque o ID da cidade está errado ou não tem ônibus
+            # Se vier vazio, é porque não tem ônibus nesta rota/data
             if not res or len(res) == 0:
-                 st.warning(f"⚠️ A API retornou lista vazia. Verifique se existem ônibus de {id_origem} para {id_destino} nesta data.")
-                 return {"erro": True, "msg": "Nenhuma viagem encontrada para esta data/rota."}
+                 return {"erro": True, "msg": "Nenhuma viagem encontrada para esta data."}
 
             lista = res[0] if (isinstance(res, list) and len(res) > 0 and isinstance(res[0], list)) else res
-            disponiveis = lista 
             
-            if not disponiveis: return {"erro": True, "msg": "Lista vazia."}
+            # Filtra apenas viagens com assentos
+            disponiveis = [v for v in lista if v.get('availableSeats', 0) > 0]
+            
+            if not disponiveis: return {"erro": True, "msg": "Sem assentos disponíveis."}
             
             try:
                 disponiveis.sort(key=lambda x: float(x.get('price', 9999)))
                 return {"erro": False, "dados": disponiveis[0]}
             except:
-                 return {"erro": True, "msg": "Erro ao ler dados da passagem."}
+                 return {"erro": True, "msg": "Erro ao processar preços."}
 
         else:
-            return {"erro": True, "msg": f"Erro API ({r.status_code}): {r.text[:100]}"}
+            return {"erro": True, "msg": f"Erro API ({r.status_code})"}
             
     except Exception as e:
         return {"erro": True, "msg": f"Erro Conexão: {str(e)}"}
@@ -223,62 +223,43 @@ with st.sidebar:
 
 st.title(f"📊 {menu}")
 
-# --- NOVA TELA: DESCOBRIDOR DE IDs ---
+# --- ABA DESCOBRIR IDs (Útil para manutenção futura) ---
 if menu == "🕵️ Descobrir IDs":
-    st.markdown("### 🔎 Encontre o Código da Cidade (ROD_XXX)")
-    st.info("Digite o nome da cidade para ver o ID Numérico correto.")
+    st.markdown("### 🔎 Encontre o Código da Cidade")
+    st.info("Digite o nome para descobrir o ID correto (Ex: Curitiba).")
     
-    termo_cidade = st.text_input("Digite o nome da cidade:", placeholder="Ex: Londrina")
+    termo = st.text_input("Nome da Cidade:", placeholder="Ex: Londrina")
     
-    if st.button("BUSCAR ID"):
-        if len(termo_cidade) < 3:
-            st.warning("Digite pelo menos 3 letras.")
-        else:
-            with st.spinner("Consultando API..."):
-                resultado = buscar_id_cidade(termo_cidade)
-                
-            if isinstance(resultado, list):
-                if len(resultado) > 0:
-                    st.success(f"Encontramos {len(resultado)} cidades:")
-                    for c in resultado:
-                        # --- AQUI ESTAVA O ERRO, AGORA CORRIGIDO ---
-                        # Mostramos o ID numérico, formatado como ROD_XXX
-                        id_oficial = c.get('id')
-                        nome_oficial = c.get('name')
-                        codigo_final = f"ROD_{id_oficial}"
-                        
-                        st.markdown(f"**{nome_oficial}**")
-                        st.code(f'"{nome_oficial.lower()}": "{codigo_final}"', language="python")
-                else:
-                    st.error("Nenhuma cidade encontrada com esse nome.")
+    if st.button("BUSCAR ID") and len(termo) >= 3:
+        with st.spinner("Consultando..."):
+            res = buscar_id_cidade(termo)
+            if isinstance(res, list) and res:
+                st.success(f"{len(res)} cidades encontradas:")
+                for c in res:
+                    st.code(f'"{c["name"].lower()}": "{c.get("url") or c.get("id")}" # {c["name"]}', language="python")
             else:
-                st.error(f"Erro na busca: {resultado.get('msg')}")
+                st.warning("Nenhuma cidade encontrada.")
 
-# --- TELAS NORMAIS ---
+# --- TELAS PRINCIPAIS ---
 else:
     with st.container():
         col1, col2 = st.columns(2)
         with col1:
-            origem = st.text_input("Cidade de Origem", placeholder="Ex: São Paulo")
+            origem = st.text_input("Cidade de Origem", placeholder="Ex: Londrina")
             data_ida = st.date_input("Data de Ida", date.today())
         with col2:
-            destino = st.text_input("Cidade de Destino", placeholder="Ex: Rio de Janeiro")
+            destino = st.text_input("Cidade de Destino", placeholder="Ex: Sao Paulo")
             data_volta = st.date_input("Data de Volta", date.today() + timedelta(days=1)) if menu != "Rodoviário" else None
 
     grupo_carro = None
     if menu in ["Veículo", "Cotação Geral"]:
         grupo_carro = st.selectbox("Categoria do Veículo", ["B - Econômico (Manual)", "EA - Executivo (Automático)"])
 
-    btn_calcular = st.button("CALCULAR COTAÇÃO 🚀")
-
-    st.markdown("---")
-
-    if btn_calcular:
+    if st.button("CALCULAR COTAÇÃO 🚀"):
         if not origem or not destino:
             st.error("Preencha Origem e Destino.")
         else:
             km_dist = get_km_google(origem, destino)
-            if km_dist == 0: st.warning("⚠️ Distância não calculada automaticamente.")
             
             c1, c2, c3 = st.columns(3)
 
@@ -289,20 +270,24 @@ else:
                     
                     if not api_res['erro']:
                         v = api_res['dados']
+                        comp = v.get('company', {}).get('name', 'Viação')
+                        saida = v.get('departure', {}).get('time', '00:00')[:5]
+                        chegada = v.get('arrival', {}).get('time', '00:00')[:5]
+                        preco = float(v.get('price', 0))
+                        
                         st.markdown(f"""
                         <div class="result-card">
                             <div class="card-title" style="color:#E67E22;">🚌 Melhor Tarifa</div>
-                            <div class="info-text"><b>Viação:</b> {v.get('company', {}).get('name', 'N/A')}</div>
-                            <div class="info-text"><b>Horário:</b> {v.get('departure', {}).get('time', '00:00')[:5]} ➝ {v.get('arrival', {}).get('time', '00:00')[:5]}</div>
-                            <div class="price-big">R$ {float(v.get('price', 0)):.2f}</div>
+                            <div class="info-text"><b>Viação:</b> {comp}</div>
+                            <div class="info-text"><b>Horário:</b> {saida} ➝ {chegada}</div>
+                            <div class="price-big">R$ {preco:.2f}</div>
                         </div>""", unsafe_allow_html=True)
                     else:
                         est = km_dist * 0.50
-                        msg_erro = api_res['msg']
                         st.markdown(f"""
                         <div class="result-card" style="border-left: 5px solid gray;">
                             <div class="card-title">🚌 Estimativa KM</div>
-                            <div class="info-text" style="color:red;">{msg_erro}</div>
+                            <div class="info-text" style="color:red;">{api_res['msg']}</div>
                             <div class="price-big" style="color:#666;">R$ {est:.2f}</div>
                         </div>""", unsafe_allow_html=True)
 
@@ -343,6 +328,7 @@ with ca: st.link_button("🚌 Solicitar Passagem", "https://portalmse.com.br/ind
 with cb: st.link_button("🚗 Solicitar Veículo", "https://docs.google.com/forms/d/e/1FAIpQLSc-ImW1hPShhR0dUT2z77rRN0PJtPw93Pz6EBMkybPJW9r8eg/viewform", use_container_width=True)
 with cc: st.link_button("🏨 Solicitar Hotel", "https://docs.google.com/forms/d/e/1FAIpQLSc7K3xq-fa_HswlyLel5pKILUVMM5kzhHbNRPDlSGFke6aJ4A/viewform", use_container_width=True)
 with cc: st.link_button("🏨 Solicitar Hotel", "https://docs.google.com/forms/d/e/1FAIpQLSc7K3xq-fa_Hsw1yLel5pKILUVMM5kzhHbNRPDISGFke6aJ4A/viewform", use_container_width=True)
+
 
 
 
