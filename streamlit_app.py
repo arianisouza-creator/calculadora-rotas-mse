@@ -13,7 +13,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# CSS: Visual Corporativo + Esconder elementos do Streamlit
+# CSS: Visual Corporativo
 st.markdown("""
 <style>
     #MainMenu {visibility: hidden;}
@@ -93,12 +93,13 @@ except:
 QP_URL = "https://queropassagem.com.br/ws_v4"
 AFFILIATE = "MSE" 
 
-# LISTA MANUAL DE CIDADES
+# --- LISTA DE CIDADES (ATUALIZE AQUI OS IDs QUE DESCOBRIR) ---
 DE_PARA_QP = {
     "sao paulo": "ROD_1", "são paulo": "ROD_1", "sp": "ROD_1",
     "rio de janeiro": "ROD_55", "rio": "ROD_55", "rj": "ROD_55",
     "curitiba": "ROD_3", "belo horizonte": "ROD_7", "bh": "ROD_7",
-    "londrina": "ROD_23", "florianopolis": "ROD_6", "brasilia": "ROD_2",
+    "londrina": "ROD_23",  # <--- CONFIRMAR SE ESTE ID ESTÁ CERTO NA FERRAMENTA DE DEBUG
+    "florianopolis": "ROD_6", "brasilia": "ROD_2",
     "campinas": "ROD_13", "santos": "ROD_10", "maringa": "ROD_16", "foz do iguacu": "ROD_17"
 }
 
@@ -110,6 +111,35 @@ TABELA_HOSPEDAGEM = {
 # =========================================================
 # 3. INTEGRAÇÕES
 # =========================================================
+
+def get_auth_headers():
+    """Gera os headers blindados para evitar erro 403"""
+    auth_str = f"{QP_USER.strip()}:{QP_PASS.strip()}"
+    auth_bytes = auth_str.encode('utf-8')
+    auth_base64 = base64.b64encode(auth_bytes).decode('utf-8')
+    return {
+        "Authorization": f"Basic {auth_base64}",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+        "Referer": "https://queropassagem.com.br/",
+        "Origin": "https://queropassagem.com.br"
+    }
+
+def buscar_id_cidade(termo):
+    """NOVA FUNÇÃO: Busca o ID correto da cidade na API"""
+    endpoint = f"{QP_URL}/stops" # Endpoint que lista todas as cidades
+    try:
+        r = requests.get(endpoint, headers=get_auth_headers())
+        if r.status_code == 200:
+            cidades = r.json()
+            # Filtra cidades que contenham o termo digitado
+            encontradas = [c for c in cidades if termo.lower() in c.get('name', '').lower()]
+            return encontradas
+        else:
+            return {"erro": True, "msg": f"Erro {r.status_code}"}
+    except Exception as e:
+        return {"erro": True, "msg": str(e)}
 
 def get_km_google(origem, destino):
     if not MAPS_KEY: return 0
@@ -132,7 +162,7 @@ def buscar_passagem_api(origem, destino, data_iso):
     id_destino = DE_PARA_QP.get(destino.lower().strip())
     
     if not id_origem or not id_destino:
-        return {"erro": True, "msg": "Cidade não mapeada na base simplificada (Verifique acentos)."}
+        return {"erro": True, "msg": f"Cidade não mapeada. Use a aba 'Descobrir IDs' para achar o código de {origem}/{destino}."}
 
     endpoint = f"{QP_URL}/new/search"
     
@@ -143,57 +173,39 @@ def buscar_passagem_api(origem, destino, data_iso):
         "affiliateCode": AFFILIATE
     }
 
-    # --- CRIPTOGRAFIA MANUAL + DISFARCE DE NAVEGADOR ---
-    auth_str = f"{QP_USER.strip()}:{QP_PASS.strip()}"
-    auth_bytes = auth_str.encode('utf-8')
-    auth_base64 = base64.b64encode(auth_bytes).decode('utf-8')
-
-    headers_custom = {
-        "Authorization": f"Basic {auth_base64}",
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Accept": "application/json",
-        "Content-Type": "application/json",
-        "Referer": "https://queropassagem.com.br/",
-        "Origin": "https://queropassagem.com.br"
-    }
-
     try:
-        r = requests.post(endpoint, json=body, headers=headers_custom)
+        r = requests.post(endpoint, json=body, headers=get_auth_headers())
         
-        # ==================================================
-        # 🕵️ MODO RAIO-X (DEBUG)
-        # ==================================================
+        # MODO DEBUG SILENCIOSO (Só loga se precisar)
         if r.status_code == 200:
             res = r.json()
             
-            # --- MOSTRA O JSON BRUTO NA TELA ---
-            st.warning("🕵️ MODO DEBUG: Dados recebidos da API:")
-            st.json(res) 
-            
-            # Tenta processar mesmo se estiver vazio ou diferente
+            # Se vier vazio, é porque o ID da cidade está errado ou não tem ônibus
+            if not res or len(res) == 0:
+                 st.warning(f"⚠️ A API retornou lista vazia. Verifique se existem ônibus de {id_origem} para {id_destino} nesta data.")
+                 # Opcional: Mostra o JSON vazio para confirmar
+                 with st.expander("Ver retorno bruto da API"):
+                     st.json(res)
+                 return {"erro": True, "msg": "Nenhuma viagem encontrada para esta data/rota."}
+
             lista = res[0] if (isinstance(res, list) and len(res) > 0 and isinstance(res[0], list)) else res
             
-            # REMOVI O FILTRO DE ASSENTOS para garantir que não estamos escondendo nada
-            # disponiveis = [v for v in lista if v.get('availableSeats', 0) > 0]
+            # Pega tudo, mesmo sem assento, para debug
             disponiveis = lista 
             
-            if not disponiveis: return {"erro": True, "msg": "A API retornou uma lista vazia [] (Veja o JSON acima)."}
+            if not disponiveis: return {"erro": True, "msg": "Lista vazia."}
             
-            # Tenta ordenar e pegar o primeiro
             try:
-                # Usa 'get' para evitar erro se o campo 'price' mudou de nome
                 disponiveis.sort(key=lambda x: float(x.get('price', 9999)))
                 return {"erro": False, "dados": disponiveis[0]}
-            except Exception as e:
-                 return {"erro": True, "msg": f"Erro ao ler os dados (Campos mudaram?): {str(e)}"}
+            except:
+                 return {"erro": True, "msg": "Erro ao ler dados da passagem."}
 
         else:
-            # Mostra o erro 403/401 detalhado se acontecer
-            st.error(f"ERRO DE CONEXÃO: {r.text}")
-            return {"erro": True, "msg": f"Erro API ({r.status_code})"}
+            return {"erro": True, "msg": f"Erro API ({r.status_code}): {r.text[:100]}"}
             
     except Exception as e:
-        return {"erro": True, "msg": f"Erro Crítico: {str(e)}"}
+        return {"erro": True, "msg": f"Erro Conexão: {str(e)}"}
 
 def calcular_dias(ida, volta):
     if not ida or not volta: return 1
@@ -210,18 +222,47 @@ with st.sidebar:
     except:
         st.markdown("### MSE TRAVEL")
     st.markdown("---")
-    menu = st.radio("Navegação", ["Cotação Geral", "Rodoviário", "Veículo", "Hospedagem"])
+    # Adicionei a ferramenta de descoberta no menu
+    menu = st.radio("Navegação", ["Cotação Geral", "Rodoviário", "Veículo", "Hospedagem", "🕵️ Descobrir IDs"])
 
 st.title(f"📊 {menu}")
 
-with st.container():
-    col1, col2 = st.columns(2)
-    with col1:
-        origem = st.text_input("Cidade de Origem", placeholder="Ex: São Paulo")
-        data_ida = st.date_input("Data de Ida", date.today())
-    with col2:
-        destino = st.text_input("Cidade de Destino", placeholder="Ex: Rio de Janeiro")
-        data_volta = st.date_input("Data de Volta", date.today() + timedelta(days=1)) if menu != "Rodoviário" else None
+# --- NOVA TELA: DESCOBRIDOR DE IDs ---
+if menu == "🕵️ Descobrir IDs":
+    st.markdown("### 🔎 Encontre o Código da Cidade (ROD_XXX)")
+    st.info("Use esta ferramenta para descobrir o código correto de Londrina ou qualquer outra cidade.")
+    
+    termo_cidade = st.text_input("Digite o nome da cidade:", placeholder="Ex: Londrina")
+    
+    if st.button("BUSCAR ID"):
+        if len(termo_cidade) < 3:
+            st.warning("Digite pelo menos 3 letras.")
+        else:
+            with st.spinner("Consultando API..."):
+                resultado = buscar_id_cidade(termo_cidade)
+                
+            if isinstance(resultado, list):
+                if len(resultado) > 0:
+                    st.success(f"Encontramos {len(resultado)} cidades:")
+                    for c in resultado:
+                        # Mostra o ID e o Nome para o usuário copiar
+                        st.code(f'"{c["name"]}": "{c["url"]}"', language="python") 
+                        st.caption(f"ID Oficial: {c['url']} | Estado: {c.get('state')}")
+                else:
+                    st.error("Nenhuma cidade encontrada com esse nome.")
+            else:
+                st.error(f"Erro na busca: {resultado.get('msg')}")
+
+# --- TELAS NORMAIS ---
+else:
+    with st.container():
+        col1, col2 = st.columns(2)
+        with col1:
+            origem = st.text_input("Cidade de Origem", placeholder="Ex: São Paulo")
+            data_ida = st.date_input("Data de Ida", date.today())
+        with col2:
+            destino = st.text_input("Cidade de Destino", placeholder="Ex: Rio de Janeiro")
+            data_volta = st.date_input("Data de Volta", date.today() + timedelta(days=1)) if menu != "Rodoviário" else None
 
     grupo_carro = None
     if menu in ["Veículo", "Cotação Geral"]:
@@ -229,78 +270,79 @@ with st.container():
 
     btn_calcular = st.button("CALCULAR COTAÇÃO 🚀")
 
-st.markdown("---")
+    st.markdown("---")
 
-if btn_calcular:
-    if not origem or not destino:
-        st.error("Preencha Origem e Destino.")
-    else:
-        km_dist = get_km_google(origem, destino)
-        if km_dist == 0: st.warning("⚠️ Distância não calculada automaticamente.")
-        
-        c1, c2, c3 = st.columns(3)
+    if btn_calcular:
+        if not origem or not destino:
+            st.error("Preencha Origem e Destino.")
+        else:
+            km_dist = get_km_google(origem, destino)
+            if km_dist == 0: st.warning("⚠️ Distância não calculada automaticamente.")
+            
+            c1, c2, c3 = st.columns(3)
 
-        # RODOVIÁRIO
-        if menu in ["Rodoviário", "Cotação Geral"]:
-            with (c1 if menu == "Cotação Geral" else st.container()):
-                # Chama a API
-                api_res = buscar_passagem_api(origem, destino, str(data_ida))
-                
-                if not api_res['erro']:
-                    v = api_res['dados']
+            # RODOVIÁRIO
+            if menu in ["Rodoviário", "Cotação Geral"]:
+                with (c1 if menu == "Cotação Geral" else st.container()):
+                    api_res = buscar_passagem_api(origem, destino, str(data_ida))
+                    
+                    if not api_res['erro']:
+                        v = api_res['dados']
+                        st.markdown(f"""
+                        <div class="result-card">
+                            <div class="card-title" style="color:#E67E22;">🚌 Melhor Tarifa</div>
+                            <div class="info-text"><b>Viação:</b> {v.get('company', {}).get('name', 'N/A')}</div>
+                            <div class="info-text"><b>Horário:</b> {v.get('departure', {}).get('time', '00:00')[:5]} ➝ {v.get('arrival', {}).get('time', '00:00')[:5]}</div>
+                            <div class="price-big">R$ {float(v.get('price', 0)):.2f}</div>
+                        </div>""", unsafe_allow_html=True)
+                    else:
+                        est = km_dist * 0.50
+                        msg_erro = api_res['msg']
+                        st.markdown(f"""
+                        <div class="result-card" style="border-left: 5px solid gray;">
+                            <div class="card-title">🚌 Estimativa KM</div>
+                            <div class="info-text" style="color:red;">{msg_erro}</div>
+                            <div class="price-big" style="color:#666;">R$ {est:.2f}</div>
+                        </div>""", unsafe_allow_html=True)
+
+            # HOSPEDAGEM
+            if menu in ["Hospedagem", "Cotação Geral"]:
+                with (c2 if menu == "Cotação Geral" else st.container()):
+                    dias = calcular_dias(data_ida, data_volta) + 1
+                    uf = next((uf for uf in TABELA_HOSPEDAGEM if uf in destino.upper()), "BR")
+                    total = TABELA_HOSPEDAGEM.get(uf, 300) * dias
                     st.markdown(f"""
                     <div class="result-card">
-                        <div class="card-title" style="color:#E67E22;">🚌 Melhor Tarifa</div>
-                        <div class="info-text"><b>Viação:</b> {v.get('company', {}).get('name', 'N/A')}</div>
-                        <div class="info-text"><b>Horário:</b> {v.get('departure', {}).get('time', '00:00')[:5]} ➝ {v.get('arrival', {}).get('time', '00:00')[:5]}</div>
-                        <div class="price-big">R$ {float(v.get('price', 0)):.2f}</div>
+                        <div class="card-title" style="color:#27AE60;">🏨 Hotel ({uf})</div>
+                        <div class="info-text"><b>Dias:</b> {dias}</div>
+                        <div class="price-big">R$ {total:.2f}</div>
                     </div>""", unsafe_allow_html=True)
-                else:
-                    est = km_dist * 0.50
-                    msg_erro = api_res['msg']
+
+            # VEÍCULO
+            if menu in ["Veículo", "Cotação Geral"]:
+                with (c3 if menu == "Cotação Geral" else st.container()):
+                    dias = calcular_dias(data_ida, data_volta)
+                    is_auto = "EA" in (grupo_carro or "")
+                    diaria = 203.44 if is_auto else 151.92
+                    consumo = 9 if is_auto else 13
+                    comb = ((km_dist * 2) / consumo) * 5.80
+                    total = (diaria * dias) + comb
                     st.markdown(f"""
-                    <div class="result-card" style="border-left: 5px solid gray;">
-                        <div class="card-title">🚌 Estimativa KM</div>
-                        <div class="info-text" style="color:red;">{msg_erro}</div>
-                        <div class="price-big" style="color:#666;">R$ {est:.2f}</div>
+                    <div class="result-card">
+                        <div class="card-title" style="color:#2980B9;">🚗 Carro + Comb.</div>
+                        <div class="info-text"><b>Distância:</b> {km_dist:.1f} km</div>
+                        <div class="info-text"><b>Locação:</b> R$ {(diaria*dias):.2f}</div>
+                        <div class="info-text"><b>Combustível:</b> R$ {comb:.2f}</div>
+                        <div class="price-big">R$ {total:.2f}</div>
                     </div>""", unsafe_allow_html=True)
-
-        # HOSPEDAGEM
-        if menu in ["Hospedagem", "Cotação Geral"]:
-            with (c2 if menu == "Cotação Geral" else st.container()):
-                dias = calcular_dias(data_ida, data_volta) + 1
-                uf = next((uf for uf in TABELA_HOSPEDAGEM if uf in destino.upper()), "BR")
-                total = TABELA_HOSPEDAGEM.get(uf, 300) * dias
-                st.markdown(f"""
-                <div class="result-card">
-                    <div class="card-title" style="color:#27AE60;">🏨 Hotel ({uf})</div>
-                    <div class="info-text"><b>Dias:</b> {dias}</div>
-                    <div class="price-big">R$ {total:.2f}</div>
-                </div>""", unsafe_allow_html=True)
-
-        # VEÍCULO
-        if menu in ["Veículo", "Cotação Geral"]:
-            with (c3 if menu == "Cotação Geral" else st.container()):
-                dias = calcular_dias(data_ida, data_volta)
-                is_auto = "EA" in (grupo_carro or "")
-                diaria = 203.44 if is_auto else 151.92
-                consumo = 9 if is_auto else 13
-                comb = ((km_dist * 2) / consumo) * 5.80
-                total = (diaria * dias) + comb
-                st.markdown(f"""
-                <div class="result-card">
-                    <div class="card-title" style="color:#2980B9;">🚗 Carro + Comb.</div>
-                    <div class="info-text"><b>Distância:</b> {km_dist:.1f} km</div>
-                    <div class="info-text"><b>Locação:</b> R$ {(diaria*dias):.2f}</div>
-                    <div class="info-text"><b>Combustível:</b> R$ {comb:.2f}</div>
-                    <div class="price-big">R$ {total:.2f}</div>
-                </div>""", unsafe_allow_html=True)
 
 st.markdown("### 📌 Próximos Passos")
 ca, cb, cc = st.columns(3)
 with ca: st.link_button("🚌 Solicitar Passagem", "https://portalmse.com.br/index.php", use_container_width=True)
 with cb: st.link_button("🚗 Solicitar Veículo", "https://docs.google.com/forms/d/e/1FAIpQLSc-ImW1hPShhR0dUT2z77rRN0PJtPw93Pz6EBMkybPJW9r8eg/viewform", use_container_width=True)
+with cc: st.link_button("🏨 Solicitar Hotel", "https://docs.google.com/forms/d/e/1FAIpQLSc7K3xq-fa_HswlyLel5pKILUVMM5kzhHbNRPDlSGFke6aJ4A/viewform", use_container_width=True)
 with cc: st.link_button("🏨 Solicitar Hotel", "https://docs.google.com/forms/d/e/1FAIpQLSc7K3xq-fa_Hsw1yLel5pKILUVMM5kzhHbNRPDISGFke6aJ4A/viewform", use_container_width=True)
+
 
 
 
