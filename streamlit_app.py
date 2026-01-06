@@ -93,14 +93,16 @@ except:
 QP_URL = "https://queropassagem.com.br/ws_v4"
 AFFILIATE = "MSE" 
 
-# --- LISTA DE CIDADES (ATUALIZE AQUI OS IDs QUE DESCOBRIR) ---
+# --- LISTA DE CIDADES (Atualize aqui com os IDs numéricos que descobrir) ---
 DE_PARA_QP = {
     "sao paulo": "ROD_1", "são paulo": "ROD_1", "sp": "ROD_1",
     "rio de janeiro": "ROD_55", "rio": "ROD_55", "rj": "ROD_55",
     "curitiba": "ROD_3", "belo horizonte": "ROD_7", "bh": "ROD_7",
-    "londrina": "ROD_23",  # <--- CONFIRMAR SE ESTE ID ESTÁ CERTO NA FERRAMENTA DE DEBUG
     "florianopolis": "ROD_6", "brasilia": "ROD_2",
-    "campinas": "ROD_13", "santos": "ROD_10", "maringa": "ROD_16", "foz do iguacu": "ROD_17"
+    "campinas": "ROD_13", "santos": "ROD_10", "maringa": "ROD_16", "foz do iguacu": "ROD_17",
+    
+    # IDs Provisórios (Use a ferramenta 'Descobrir IDs' para corrigir se der erro)
+    "londrina": "ROD_23" 
 }
 
 TABELA_HOSPEDAGEM = { 
@@ -176,21 +178,16 @@ def buscar_passagem_api(origem, destino, data_iso):
     try:
         r = requests.post(endpoint, json=body, headers=get_auth_headers())
         
-        # MODO DEBUG SILENCIOSO (Só loga se precisar)
+        # MODO DEBUG SILENCIOSO
         if r.status_code == 200:
             res = r.json()
             
             # Se vier vazio, é porque o ID da cidade está errado ou não tem ônibus
             if not res or len(res) == 0:
                  st.warning(f"⚠️ A API retornou lista vazia. Verifique se existem ônibus de {id_origem} para {id_destino} nesta data.")
-                 # Opcional: Mostra o JSON vazio para confirmar
-                 with st.expander("Ver retorno bruto da API"):
-                     st.json(res)
                  return {"erro": True, "msg": "Nenhuma viagem encontrada para esta data/rota."}
 
             lista = res[0] if (isinstance(res, list) and len(res) > 0 and isinstance(res[0], list)) else res
-            
-            # Pega tudo, mesmo sem assento, para debug
             disponiveis = lista 
             
             if not disponiveis: return {"erro": True, "msg": "Lista vazia."}
@@ -222,7 +219,6 @@ with st.sidebar:
     except:
         st.markdown("### MSE TRAVEL")
     st.markdown("---")
-    # Adicionei a ferramenta de descoberta no menu
     menu = st.radio("Navegação", ["Cotação Geral", "Rodoviário", "Veículo", "Hospedagem", "🕵️ Descobrir IDs"])
 
 st.title(f"📊 {menu}")
@@ -230,7 +226,7 @@ st.title(f"📊 {menu}")
 # --- NOVA TELA: DESCOBRIDOR DE IDs ---
 if menu == "🕵️ Descobrir IDs":
     st.markdown("### 🔎 Encontre o Código da Cidade (ROD_XXX)")
-    st.info("Use esta ferramenta para descobrir o código correto de Londrina ou qualquer outra cidade.")
+    st.info("Digite o nome da cidade para ver o ID Numérico correto.")
     
     termo_cidade = st.text_input("Digite o nome da cidade:", placeholder="Ex: Londrina")
     
@@ -245,9 +241,14 @@ if menu == "🕵️ Descobrir IDs":
                 if len(resultado) > 0:
                     st.success(f"Encontramos {len(resultado)} cidades:")
                     for c in resultado:
-                        # Mostra o ID e o Nome para o usuário copiar
-                        st.code(f'"{c["name"]}": "{c["url"]}"', language="python") 
-                        st.caption(f"ID Oficial: {c['url']} | Estado: {c.get('state')}")
+                        # --- AQUI ESTAVA O ERRO, AGORA CORRIGIDO ---
+                        # Mostramos o ID numérico, formatado como ROD_XXX
+                        id_oficial = c.get('id')
+                        nome_oficial = c.get('name')
+                        codigo_final = f"ROD_{id_oficial}"
+                        
+                        st.markdown(f"**{nome_oficial}**")
+                        st.code(f'"{nome_oficial.lower()}": "{codigo_final}"', language="python")
                 else:
                     st.error("Nenhuma cidade encontrada com esse nome.")
             else:
@@ -342,6 +343,7 @@ with ca: st.link_button("🚌 Solicitar Passagem", "https://portalmse.com.br/ind
 with cb: st.link_button("🚗 Solicitar Veículo", "https://docs.google.com/forms/d/e/1FAIpQLSc-ImW1hPShhR0dUT2z77rRN0PJtPw93Pz6EBMkybPJW9r8eg/viewform", use_container_width=True)
 with cc: st.link_button("🏨 Solicitar Hotel", "https://docs.google.com/forms/d/e/1FAIpQLSc7K3xq-fa_HswlyLel5pKILUVMM5kzhHbNRPDlSGFke6aJ4A/viewform", use_container_width=True)
 with cc: st.link_button("🏨 Solicitar Hotel", "https://docs.google.com/forms/d/e/1FAIpQLSc7K3xq-fa_Hsw1yLel5pKILUVMM5kzhHbNRPDISGFke6aJ4A/viewform", use_container_width=True)
+
 
 
 
