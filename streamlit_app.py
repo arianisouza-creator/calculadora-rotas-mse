@@ -143,13 +143,11 @@ def buscar_passagem_api(origem, destino, data_iso):
         "affiliateCode": AFFILIATE
     }
 
-    # --- CORREÇÃO TÉCNICA AVANÇADA ---
-    # 1. Cria a autenticação manualmente para evitar erro com caracteres especiais
+    # --- CRIPTOGRAFIA MANUAL + DISFARCE DE NAVEGADOR ---
     auth_str = f"{QP_USER.strip()}:{QP_PASS.strip()}"
     auth_bytes = auth_str.encode('utf-8')
     auth_base64 = base64.b64encode(auth_bytes).decode('utf-8')
 
-    # 2. Cabeçalhos que simulam um Navegador Real (Evita erro 403)
     headers_custom = {
         "Authorization": f"Basic {auth_base64}",
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -160,24 +158,42 @@ def buscar_passagem_api(origem, destino, data_iso):
     }
 
     try:
-        # Envia a requisição SEM o parâmetro auth= (pois já está no header)
         r = requests.post(endpoint, json=body, headers=headers_custom)
         
+        # ==================================================
+        # 🕵️ MODO RAIO-X (DEBUG)
+        # ==================================================
         if r.status_code == 200:
             res = r.json()
+            
+            # --- MOSTRA O JSON BRUTO NA TELA ---
+            st.warning("🕵️ MODO DEBUG: Dados recebidos da API:")
+            st.json(res) 
+            
+            # Tenta processar mesmo se estiver vazio ou diferente
             lista = res[0] if (isinstance(res, list) and len(res) > 0 and isinstance(res[0], list)) else res
             
-            disponiveis = [v for v in lista if v.get('availableSeats', 0) > 0]
+            # REMOVI O FILTRO DE ASSENTOS para garantir que não estamos escondendo nada
+            # disponiveis = [v for v in lista if v.get('availableSeats', 0) > 0]
+            disponiveis = lista 
             
-            if not disponiveis: return {"erro": True, "msg": "Sem viagens disponíveis nesta data."}
+            if not disponiveis: return {"erro": True, "msg": "A API retornou uma lista vazia [] (Veja o JSON acima)."}
             
-            disponiveis.sort(key=lambda x: x['price'])
-            return {"erro": False, "dados": disponiveis[0]}
+            # Tenta ordenar e pegar o primeiro
+            try:
+                # Usa 'get' para evitar erro se o campo 'price' mudou de nome
+                disponiveis.sort(key=lambda x: float(x.get('price', 9999)))
+                return {"erro": False, "dados": disponiveis[0]}
+            except Exception as e:
+                 return {"erro": True, "msg": f"Erro ao ler os dados (Campos mudaram?): {str(e)}"}
+
         else:
-            return {"erro": True, "msg": f"Erro API ({r.status_code}): {r.text[:200]}"}
+            # Mostra o erro 403/401 detalhado se acontecer
+            st.error(f"ERRO DE CONEXÃO: {r.text}")
+            return {"erro": True, "msg": f"Erro API ({r.status_code})"}
             
     except Exception as e:
-        return {"erro": True, "msg": f"Erro de Conexão: {str(e)}"}
+        return {"erro": True, "msg": f"Erro Crítico: {str(e)}"}
 
 def calcular_dias(ida, volta):
     if not ida or not volta: return 1
@@ -235,9 +251,9 @@ if btn_calcular:
                     st.markdown(f"""
                     <div class="result-card">
                         <div class="card-title" style="color:#E67E22;">🚌 Melhor Tarifa</div>
-                        <div class="info-text"><b>Viação:</b> {v['company']['name']}</div>
-                        <div class="info-text"><b>Horário:</b> {v['departure']['time'][:5]} ➝ {v['arrival']['time'][:5]}</div>
-                        <div class="price-big">R$ {v['price']:.2f}</div>
+                        <div class="info-text"><b>Viação:</b> {v.get('company', {}).get('name', 'N/A')}</div>
+                        <div class="info-text"><b>Horário:</b> {v.get('departure', {}).get('time', '00:00')[:5]} ➝ {v.get('arrival', {}).get('time', '00:00')[:5]}</div>
+                        <div class="price-big">R$ {float(v.get('price', 0)):.2f}</div>
                     </div>""", unsafe_allow_html=True)
                 else:
                     est = km_dist * 0.50
@@ -285,6 +301,7 @@ ca, cb, cc = st.columns(3)
 with ca: st.link_button("🚌 Solicitar Passagem", "https://portalmse.com.br/index.php", use_container_width=True)
 with cb: st.link_button("🚗 Solicitar Veículo", "https://docs.google.com/forms/d/e/1FAIpQLSc-ImW1hPShhR0dUT2z77rRN0PJtPw93Pz6EBMkybPJW9r8eg/viewform", use_container_width=True)
 with cc: st.link_button("🏨 Solicitar Hotel", "https://docs.google.com/forms/d/e/1FAIpQLSc7K3xq-fa_Hsw1yLel5pKILUVMM5kzhHbNRPDISGFke6aJ4A/viewform", use_container_width=True)
+
 
 
 
