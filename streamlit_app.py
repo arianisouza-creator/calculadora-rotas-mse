@@ -96,7 +96,7 @@ DE_PARA_QP = {
     
     # IMPORTANTE: Use a aba 'Descobrir IDs' para achar o ID exato da rodoviária (ROD_...)
     # O ID 'ROD_CIT_830' é da cidade inteira e pode causar erro 400 na busca.
-    "londrina": "ROD_CIT_830" 
+    "londrina": "ROD_837" 
 }
 
 TABELA_HOSPEDAGEM = { 
@@ -362,3 +362,4 @@ else:
                         <div class="info-text"><b>Locação:</b> R$ {(diaria*dias_carro):.2f}</div>
                         <div class="price-big">R$ {total_carro:.2f}</div>
                      </div>""", unsafe_allow_html=True)
+
