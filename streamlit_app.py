@@ -89,11 +89,11 @@ except:
     st.stop()
 
 # --- URL DE PRODUÇÃO (OFICIAL) ---
+# Confirmado: URL sem restrição de IP e com affiliateCode MSE
 QP_URL = "https://queropassagem.com.br/ws_v4"
 AFFILIATE = "MSE" 
 
-# LISTA MANUAL DE CIDADES (Enquanto não puxamos automático)
-# O Gabriel passou o endpoint para puxarmos isso automático depois.
+# LISTA MANUAL DE CIDADES 
 DE_PARA_QP = {
     "sao paulo": "ROD_1", "são paulo": "ROD_1", "sp": "ROD_1",
     "rio de janeiro": "ROD_55", "rio": "ROD_55", "rj": "ROD_55",
@@ -135,15 +135,25 @@ def buscar_passagem_api(origem, destino, data_iso):
         return {"erro": True, "msg": "Cidade não mapeada na base simplificada."}
 
     endpoint = f"{QP_URL}/new/search"
-    body = {"from": id_origem, "to": id_destino, "travelDate": data_iso, "affiliateCode": AFFILIATE}
+    
+    # ATENÇÃO: Payload ajustado para PRODUÇÃO com affiliateCode MSE
+    body = {
+        "from": id_origem, 
+        "to": id_destino, 
+        "travelDate": data_iso, 
+        "affiliateCode": AFFILIATE
+    }
 
     try:
-        # Tenta conectar. Se o IP estiver liberado, vai funcionar!
+        # A autenticação vai automática com as credenciais do secrets
         r = requests.post(endpoint, json=body, auth=(QP_USER, QP_PASS))
         
         if r.status_code == 200:
             res = r.json()
+            # Tratamento caso a API retorne lista dentro de lista ou objeto direto
             lista = res[0] if (isinstance(res, list) and len(res) > 0 and isinstance(res[0], list)) else res
+            
+            # Filtra apenas quem tem assento
             disponiveis = [v for v in lista if v.get('availableSeats', 0) > 0]
             
             if not disponiveis: return {"erro": True, "msg": "Sem viagens disponíveis nesta data."}
@@ -151,7 +161,7 @@ def buscar_passagem_api(origem, destino, data_iso):
             disponiveis.sort(key=lambda x: x['price'])
             return {"erro": False, "dados": disponiveis[0]}
         else:
-            return {"erro": True, "msg": f"Erro API ({r.status_code}): IP Bloqueado ou Senha Inválida."}
+            return {"erro": True, "msg": f"Erro API ({r.status_code}): Verifique Credenciais ou AffiliateCode."}
             
     except Exception as e:
         return {"erro": True, "msg": f"Erro de Conexão: {str(e)}"}
@@ -204,7 +214,7 @@ if btn_calcular:
         # RODOVIÁRIO
         if menu in ["Rodoviário", "Cotação Geral"]:
             with (c1 if menu == "Cotação Geral" else st.container()):
-                # Chama a API
+                # Chama a API de Produção
                 api_res = buscar_passagem_api(origem, destino, str(data_ida))
                 
                 if not api_res['erro']:
@@ -262,6 +272,7 @@ ca, cb, cc = st.columns(3)
 with ca: st.link_button("🚌 Solicitar Passagem", "https://portalmse.com.br/index.php", use_container_width=True)
 with cb: st.link_button("🚗 Solicitar Veículo", "https://docs.google.com/forms/d/e/1FAIpQLSc-ImW1hPShhR0dUT2z77rRN0PJtPw93Pz6EBMkybPJW9r8eg/viewform", use_container_width=True)
 with cc: st.link_button("🏨 Solicitar Hotel", "https://docs.google.com/forms/d/e/1FAIpQLSc7K3xq-fa_Hsw1yLel5pKILUVMM5kzhHbNRPDISGFke6aJ4A/viewform", use_container_width=True)
+
 
 
 
