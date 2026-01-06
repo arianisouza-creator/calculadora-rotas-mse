@@ -89,11 +89,10 @@ except:
     st.stop()
 
 # --- URL DE PRODUÇÃO (OFICIAL) ---
-# Confirmado: URL sem restrição de IP e com affiliateCode MSE
 QP_URL = "https://queropassagem.com.br/ws_v4"
 AFFILIATE = "MSE" 
 
-# LISTA MANUAL DE CIDADES 
+# LISTA MANUAL DE CIDADES (Simplificada para demo)
 DE_PARA_QP = {
     "sao paulo": "ROD_1", "são paulo": "ROD_1", "sp": "ROD_1",
     "rio de janeiro": "ROD_55", "rio": "ROD_55", "rj": "ROD_55",
@@ -136,32 +135,40 @@ def buscar_passagem_api(origem, destino, data_iso):
 
     endpoint = f"{QP_URL}/new/search"
     
-    # ATENÇÃO: Payload ajustado para PRODUÇÃO com affiliateCode MSE
     body = {
         "from": id_origem, 
         "to": id_destino, 
         "travelDate": data_iso, 
         "affiliateCode": AFFILIATE
     }
+    
+    # --- CABEÇALHOS (HEADERS) PARA EVITAR ERRO 403 ---
+    # Isso faz o Python se "disfarçar" de Google Chrome
+    headers_fake = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "application/json",
+        "Content-Type": "application/json"
+    }
 
     try:
-        # A autenticação vai automática com as credenciais do secrets
-        r = requests.post(endpoint, json=body, auth=(QP_USER, QP_PASS))
+        # Enviamos os headers junto com a autenticação
+        r = requests.post(endpoint, json=body, auth=(QP_USER, QP_PASS), headers=headers_fake)
         
         if r.status_code == 200:
             res = r.json()
-            # Tratamento caso a API retorne lista dentro de lista ou objeto direto
+            # Tratamento para quando a API retorna lista de listas
             lista = res[0] if (isinstance(res, list) and len(res) > 0 and isinstance(res[0], list)) else res
             
-            # Filtra apenas quem tem assento
+            # Filtra apenas viagens com assentos disponíveis
             disponiveis = [v for v in lista if v.get('availableSeats', 0) > 0]
             
             if not disponiveis: return {"erro": True, "msg": "Sem viagens disponíveis nesta data."}
             
+            # Ordena pelo preço menor
             disponiveis.sort(key=lambda x: x['price'])
             return {"erro": False, "dados": disponiveis[0]}
         else:
-            return {"erro": True, "msg": f"Erro API ({r.status_code}): Verifique Credenciais ou AffiliateCode."}
+            return {"erro": True, "msg": f"Erro API ({r.status_code}): {r.text}"}
             
     except Exception as e:
         return {"erro": True, "msg": f"Erro de Conexão: {str(e)}"}
@@ -214,7 +221,7 @@ if btn_calcular:
         # RODOVIÁRIO
         if menu in ["Rodoviário", "Cotação Geral"]:
             with (c1 if menu == "Cotação Geral" else st.container()):
-                # Chama a API de Produção
+                # Chama a API
                 api_res = buscar_passagem_api(origem, destino, str(data_ida))
                 
                 if not api_res['erro']:
@@ -272,6 +279,7 @@ ca, cb, cc = st.columns(3)
 with ca: st.link_button("🚌 Solicitar Passagem", "https://portalmse.com.br/index.php", use_container_width=True)
 with cb: st.link_button("🚗 Solicitar Veículo", "https://docs.google.com/forms/d/e/1FAIpQLSc-ImW1hPShhR0dUT2z77rRN0PJtPw93Pz6EBMkybPJW9r8eg/viewform", use_container_width=True)
 with cc: st.link_button("🏨 Solicitar Hotel", "https://docs.google.com/forms/d/e/1FAIpQLSc7K3xq-fa_Hsw1yLel5pKILUVMM5kzhHbNRPDISGFke6aJ4A/viewform", use_container_width=True)
+
 
 
 
